@@ -1,0 +1,33 @@
+name: "✨ Feature Request"
+description: "Suggest an idea or new engine adapter for Loom"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement or new feature for Loom!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem is.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives you've considered
+      description: Any alternative solutions or features you've considered.
+  - type: textarea
+    id: engine_details
+    attributes:
+      label: New Engine Adapter Details (if applicable)
+      description: If proposing a new engine adapter, specify its license (e.g., MIT, Apache 2.0, GPL) and CLI execution model.

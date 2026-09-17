@@ -1,0 +1,350 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Loom — Design Tokens & Base Theme
+   Primary design target: dark mode.
+   Tokens defined in HSL space for color manipulation.
+   ========================================================================== */
+
+@layer base {
+  :root,
+  .dark {
+    /* ---- Base surfaces ---- */
+    --background: 240 5% 4%;           /* #0A0A0B */
+    --foreground: 220 7% 92%;          /* #E8E9EB */
+
+    --surface: 220 9% 9%;              /* #141518 — panels, sidebar */
+    --surface-foreground: 220 7% 92%;
+
+    --surface-raised: 220 10% 12%;     /* #1C1E22 — modals, dropdowns */
+    --surface-raised-foreground: 220 7% 92%;
+
+    /* shadcn aliases */
+    --card: 220 9% 9%;
+    --card-foreground: 220 7% 92%;
+    --popover: 220 10% 12%;
+    --popover-foreground: 220 7% 92%;
+
+    /* ---- Borders & inputs ---- */
+    --border: 220 8% 16%;              /* #26282D — 1px separators */
+    --border-strong: 220 8% 25%;       /* #3A3D44 — focus, active */
+    --input: 220 8% 16%;
+    --ring: 82 78% 55%;                /* accent, used for focus rings */
+
+    /* ---- Text ---- */
+    --muted: 220 9% 9%;
+    --muted-foreground: 220 7% 64%;    /* #9CA0A8 */
+    --faint-foreground: 220 6% 38%;    /* #5C6068 — timestamps, disabled */
+
+    /* ---- Accent (lime) ---- */
+    --accent: 82 78% 55%;              /* #A3E635 */
+    --accent-hover: 82 85% 62%;        /* #B4F04A */
+    --accent-foreground: 240 5% 4%;    /* text ON accent buttons */
+    --accent-dim: 82 78% 55%;          /* use with alpha */
+
+    /* ---- Primary (shadcn alias for accent) ---- */
+    --primary: 82 78% 55%;
+    --primary-foreground: 240 5% 4%;
+
+    /* ---- Secondary (neutral surface for non-primary buttons) ---- */
+    --secondary: 220 10% 12%;
+    --secondary-foreground: 220 7% 92%;
+
+    /* ---- Semantic ---- */
+    --success: 142 69% 58%;            /* #4ADE80 */
+    --success-foreground: 240 5% 4%;
+    --warning: 37 91% 55%;             /* #F5A623 — also used as "live" */
+    --warning-foreground: 240 5% 4%;
+    --destructive: 0 91% 71%;          /* #F87171 */
+    --destructive-foreground: 240 5% 4%;
+
+    /* ---- Live run indicator ---- */
+    --live: 37 91% 55%;
+
+    /* ---- Radii — small, consistent. Not bubbly. ---- */
+    --radius: 0.375rem;                /* 6px */
+    --radius-sm: 0.25rem;              /* 4px */
+    --radius-lg: 0.5rem;               /* 8px */
+
+    /* ---- Fonts ---- */
+    --font-sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "Geist Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+    /* ---- Motion ---- */
+    --duration-fast: 120ms;
+    --duration-base: 180ms;
+    --duration-slow: 240ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .light {
+    --background: 0 0% 98%;            /* #FAFAFA */
+    --foreground: 240 5% 4%;
+
+    --surface: 0 0% 100%;
+    --surface-foreground: 240 5% 4%;
+    --surface-raised: 0 0% 100%;
+    --surface-raised-foreground: 240 5% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 5% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 5% 4%;
+
+    --border: 220 13% 91%;             /* #E5E7EB */
+    --border-strong: 220 13% 80%;
+    --input: 220 13% 91%;
+    --ring: 82 85% 34%;
+
+    --muted: 220 13% 96%;
+    --muted-foreground: 240 4% 34%;    /* #52525B */
+    --faint-foreground: 240 4% 55%;
+
+    --accent: 82 85% 34%;              /* #65A30D — darker for light bg contrast */
+    --accent-hover: 82 85% 28%;
+    --accent-foreground: 0 0% 100%;
+    --accent-dim: 82 85% 34%;
+
+    --primary: 82 85% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 13% 96%;
+    --secondary-foreground: 240 5% 4%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 44%;
+    --warning-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --live: 32 95% 44%;
+  }
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    height: 100%;
+    width: 100%;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: dark;
+  }
+
+  body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-size: 13.5px;
+    line-height: 1.5;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  code, pre, kbd, samp,
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Anything that updates in real time MUST use tabular figures. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Selection */
+::selection {
+  background: hsla(var(--accent) / 0.25);
+  color: hsl(var(--foreground));
+}
+
+/* --- High-Craft Component Classes --- */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 12px hsla(var(--accent) / 0.2);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.btn-primary:hover:not(:disabled) {
+  background: hsl(var(--accent-hover));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 16px hsla(var(--accent) / 0.35);
+  transform: translateY(-1px);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: hsl(var(--surface-raised));
+  color: hsl(var(--foreground));
+  font-weight: 500;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.btn-secondary:hover {
+  background: hsl(var(--border));
+  border-color: hsl(var(--border-strong));
+  color: #FFFFFF;
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 12px hsla(var(--destructive) / 0.25);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.btn-danger:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.btn-danger:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.btn-ghost:hover {
+  background: hsl(var(--surface-raised));
+  color: hsl(var(--foreground));
+}
+
+/* Engine Badges */
+.badge-locust {
+  background: hsla(37 91% 55% / 0.15);
+  color: #FBBF24;
+  border: 1px solid hsla(37 91% 55% / 0.3);
+}
+.badge-goose {
+  background: hsla(199 89% 48% / 0.15);
+  color: #38BDF8;
+  border: 1px solid hsla(199 89% 48% / 0.3);
+}
+.badge-k6 {
+  background: hsla(271 91% 65% / 0.15);
+  color: #C084FC;
+  border: 1px solid hsla(271 91% 65% / 0.3);
+}
+
+/* Status Pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.status-pill.ready {
+  background: hsla(var(--success) / 0.12);
+  color: hsl(var(--success));
+  border: 1px solid hsla(var(--success) / 0.28);
+}
+.status-pill.running {
+  background: hsla(var(--warning) / 0.15);
+  color: hsl(var(--warning));
+  border: 1px solid hsla(var(--warning) / 0.35);
+}
+.status-pill.finished {
+  background: hsla(var(--success) / 0.14);
+  color: hsl(var(--success));
+  border: 1px solid hsla(var(--success) / 0.3);
+}
+.status-pill.failed {
+  background: hsla(var(--destructive) / 0.15);
+  color: hsl(var(--destructive));
+  border: 1px solid hsla(var(--destructive) / 0.35);
+}
+
+/* Animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+.pulse {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}

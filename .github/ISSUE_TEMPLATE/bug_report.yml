@@ -1,0 +1,72 @@
+name: "🐛 Bug Report"
+description: "File a report to help us fix an issue in Loom"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem in Loom! Please provide as much context as possible.
+  - type: input
+    id: version
+    attributes:
+      label: Loom Version
+      description: What version of Loom are you using? (Check top left header)
+      placeholder: "e.g. 0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11 / 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu / Debian)
+        - Linux (Arch / Fedora)
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Load Testing Engine
+      description: Which engine were you running when the issue occurred?
+      options:
+        - Locust (Python)
+        - Goose (Rust)
+        - k6 (JavaScript)
+        - UI / Non-Engine specific
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Open project '...'
+        2. Set users to 50
+        3. Click 'Run Test'
+        4. See error '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console Logs / Terminal Output
+      description: Paste any logs from the Process Console tab or terminal.
+      render: shell

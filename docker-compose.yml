@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  loom:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: loom-loadtest-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # Loom Web / Dashboard UI
+      - "8089:8089"   # Locust Web UI (optional fallback)
+    volumes:
+      - ./data:/opt/loom/data           # SQLite database persistence
+      - ./examples:/opt/loom/examples   # Shared test scripts
+      - ./runs:/opt/loom/runs           # Run artifact logs & CSVs
+    environment:
+      - LOOM_ENV=production
+      - LOOM_DATA_DIR=/opt/loom/data
+      - LOOM_RUNS_DIR=/opt/loom/runs
+    networks:
+      - loom-network
+
+networks:
+  loom-network:
+    driver: bridge

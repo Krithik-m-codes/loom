@@ -1,0 +1,19 @@
+[package]
+name = "engine-locust"
+version = "0.1.0"
+edition = "2021"
+description = "Locust engine adapter for Loom — subprocess-only, CSV-polling metrics"
+
+[dependencies]
+engine-core = { path = "../engine-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+futures = "0.3"
+csv = "1.3"
+which = "7"
+async-stream = "0.3"
