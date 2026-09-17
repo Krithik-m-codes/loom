@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Loom! Loom is an open-source, loc
 
 ### Getting the Code
 ```bash
-git clone https://github.com/krithik-m-dev/loom.git
+git clone https://github.com/Krithik-m-codes/loom.git
 cd loom
 pnpm install
 ```

@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.80+-DEA584.svg?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![React 19](https://img.shields.io/badge/React-19.x-61DAFB.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Engines](https://img.shields.io/badge/Engines-Locust%20|%20Goose%20|%20k6-A3E635.svg?style=flat-square)](https://github.com/krithik-m-dev/loom)
+[![Engines](https://img.shields.io/badge/Engines-Locust%20|%20Goose%20|%20k6-A3E635.svg?style=flat-square)](https://github.com/Krithik-m-codes/loom)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
 [Features](#-key-features) •
@@ -121,7 +121,7 @@ Loom adheres to a **Subprocess-Only Invocation Model** to ensure 100% license co
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/krithik-m-dev/loom.git
+git clone https://github.com/Krithik-m-codes/loom.git
 cd loom
 
 # 2. Install frontend dependencies
