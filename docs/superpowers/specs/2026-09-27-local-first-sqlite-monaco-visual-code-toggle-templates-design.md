@@ -421,4 +421,46 @@ interface FlowchartBuilderViewProps {
 
 ---
 
+## 15. Kubus-Inspired App Shell (added post-approval)
+
+Design reference: Kubus (FloSch62/Kubus) docs — quickstart flow, window regions, overview widgets. Goal: the app must always tell the user what to do next.
+
+### 15.1 Guided flow (Loom quickstart)
+
+Numbered path rendered on the Dashboard and in every empty state:
+
+1. Select project (TopNav project switcher; empty → "Create project" CTA)
+2. Create suite from template (Sidebar "New suite"; empty → template picker CTA)
+3. Edit (Editor Visual/Code tabs)
+4. Run (Runner; disabled with reason + fix link when blocked)
+5. Analyze (History + run-details drawer)
+
+### 15.2 Window regions
+
+- Top bar: project switcher, engine filter, Ctrl+K, settings (Engines page). Theme toggle deferred.
+- Nav drawer: existing groups + filter box.
+- Content area: unchanged.
+- Bottom dock (new, `LogDock`): tabbed run-log streams, resizable via drag, collapsible, fed by the existing `run-log` subscription in App.
+- Details drawer (new, `RunDetailsDrawer`): History row click → slide-over with read-only Summary + Config tabs.
+
+### 15.3 Notifications (new, `ToastContext`)
+
+Top-right stack: success (suite saved, project created), error (launch failure, engine missing, save failure). Auto-dismiss 5s; errors sticky until dismissed. Replaces silent `console.error` paths in App run/save handlers.
+
+### 15.4 Issues widget (new, `AttentionNeeded`)
+
+Dashboard widget with clickable issues: engines NotInstalled (→ Engines page), suites with empty target host (→ Editor), recent failed runs (→ History). Mirrors Kubus failing-pods/warnings lists. Empty → "All clear" state.
+
+### 15.5 Per-project cards
+
+Dashboard project cards: suite count, run count, last-run status badge, engine readiness; click → select project + open Editor/Runner. Data from `listProjects` / `listSuites` / `getRunHistory`.
+
+### 15.6 Suite quick actions
+
+Sidebar suite rows gain a Run shortcut (mirrors Kubus row actions) calling the existing run handler.
+
+Non-goals: theme toggle, saved load-profile presets, drawer back-stack, multi-tab dock terminals.
+
+---
+
 **Next Step**: Upon approval, invoke `writing-plans` skill to generate detailed implementation plan with task breakdown.

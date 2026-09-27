@@ -53,6 +53,13 @@
 
 ---
 
+## Baseline & execution order
+
+- Baseline commit `fb0b7b9` on branch `feat/sqlite-monaco-templates-shell`: prior project-first shell WIP + dropped `vendor/locust` tree. Every task starts from a clean tree.
+- Implementers must read the CURRENT file contents first — prior sessions reworked App/Sidebar/TopNav, so historical line numbers may have shifted. Brief text (names, IPC signatures, SQL, test cases) is authoritative, not line numbers.
+- Execution order is 0, 1, 2, 3, 4, 5, 7, 8, 6, 9, 10, 12, 11 because Task 6 consumes Task 7's props and Task 8's modal.
+- Never `git add -A`: stage only the files your task created or modified (`git status --short` to verify).
+
 ### Task 0: Unblock the Tauri build on a fresh clone
 
 **Files:**
@@ -1081,9 +1088,12 @@ Expected: onboarding → create project → New Suite from template → edit Vis
 - [ ] **Step 6: Commit any test fixes**
 
 ```bash
-git add -A
+git status --short
+git add <only the test/source files this task changed>
 git commit -m "test: expand coverage for sqlite projects, editor, templates"
 ```
+
+(Never `git add -A` — it sweeps unrelated files into the commit and breaks review diffs.)
 
 ---
 
