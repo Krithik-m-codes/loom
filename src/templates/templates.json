@@ -1,0 +1,57 @@
+{
+  "locust": [
+    {
+      "id": "locust-basic",
+      "name": "Basic HTTP GET",
+      "description": "Browse landing, catalog, and cart pages with an HttpUser.",
+      "script": "\"\"\"Loom starter — Basic HTTP GET (Locust).\"\"\"\n\nfrom locust import HttpUser, task, between\n\n\nclass WebsiteUser(HttpUser):\n    wait_time = between(1, 3)\n\n    @task(3)\n    def index_page(self):\n        \"\"\"Browse landing page.\"\"\"\n        self.client.get(\"/\", name=\"[GET] /\")\n\n    @task(2)\n    def view_products(self):\n        \"\"\"Browse catalog.\"\"\"\n        self.client.get(\"/products\", name=\"[GET] /products\")\n\n    @task(1)\n    def view_cart(self):\n        \"\"\"Check shopping cart.\"\"\"\n        self.client.get(\"/cart\", name=\"[GET] /cart\")\n",
+      "config": { "users": 10, "spawn_rate": 2, "duration": "30s" }
+    },
+    {
+      "id": "locust-auth-flow",
+      "name": "Login + Authenticated API",
+      "description": "Log in on start, then hit an authenticated profile endpoint.",
+      "script": "\"\"\"Loom starter — Login + Authenticated API (Locust).\"\"\"\n\nfrom locust import HttpUser, task, between\n\n\nclass AuthUser(HttpUser):\n    wait_time = between(1, 3)\n    token = \"\"\n\n    def on_start(self):\n        \"\"\"Log in once per spawned user.\"\"\"\n        with self.client.post(\n            \"/login\",\n            json={\"username\": \"demo\", \"password\": \"demo\"},\n            catch_response=True,\n        ) as resp:\n            if resp.status_code == 200:\n                try:\n                    self.token = resp.json().get(\"token\", \"\")\n                except ValueError:\n                    self.token = \"\"\n                resp.success()\n            else:\n                resp.failure(f\"login failed: {resp.status_code}\")\n\n    @task\n    def view_profile(self):\n        \"\"\"Fetch the authenticated profile.\"\"\"\n        headers = {\"Authorization\": f\"Bearer {self.token}\"} if self.token else {}\n        self.client.get(\"/api/profile\", headers=headers, name=\"[GET] /api/profile\")\n",
+      "config": { "users": 10, "spawn_rate": 2, "duration": "60s" }
+    },
+    {
+      "id": "locust-crud",
+      "name": "REST CRUD Workflow",
+      "description": "Create, read, update, and delete items through a REST API.",
+      "script": "\"\"\"Loom starter — REST CRUD Workflow (Locust).\"\"\"\n\nfrom locust import HttpUser, task, between\n\n\nclass CrudUser(HttpUser):\n    wait_time = between(1, 2)\n    item_id = None\n\n    @task(2)\n    def create_item(self):\n        \"\"\"Create an item and remember its id.\"\"\"\n        with self.client.post(\n            \"/api/items\", json={\"name\": \"loom-item\"}, catch_response=True\n        ) as resp:\n            if resp.status_code in (200, 201):\n                try:\n                    self.item_id = resp.json().get(\"id\")\n                except ValueError:\n                    self.item_id = None\n                resp.success()\n            else:\n                resp.failure(f\"create failed: {resp.status_code}\")\n\n    @task(3)\n    def read_items(self):\n        \"\"\"List all items.\"\"\"\n        self.client.get(\"/api/items\", name=\"[GET] /api/items\")\n\n    @task(1)\n    def update_item(self):\n        \"\"\"Update the last created item.\"\"\"\n        if self.item_id is None:\n            return\n        self.client.put(\n            f\"/api/items/{self.item_id}\",\n            json={\"name\": \"loom-item-updated\"},\n            name=\"[PUT] /api/items/:id\",\n        )\n\n    @task(1)\n    def delete_item(self):\n        \"\"\"Delete the last created item.\"\"\"\n        if self.item_id is None:\n            return\n        self.client.delete(\n            f\"/api/items/{self.item_id}\", name=\"[DELETE] /api/items/:id\"\n        )\n        self.item_id = None\n",
+      "config": { "users": 20, "spawn_rate": 4, "duration": "60s" }
+    }
+  ],
+  "k6": [
+    {
+      "id": "k6-basic",
+      "name": "Basic HTTP GET",
+      "description": "Health check plus API query against TARGET_HOST.",
+      "script": "/**\n * Loom starter — Basic HTTP GET (k6).\n */\n\nimport http from 'k6/http';\nimport { check, sleep } from 'k6';\n\nexport const options = {\n  vus: 10,\n  duration: '30s',\n  thresholds: {\n    http_req_duration: ['p(95)<500'],\n  },\n};\n\nexport default function () {\n  const BASE_URL = __ENV.TARGET_HOST || 'http://localhost:8080';\n\n  const res1 = http.get(`${BASE_URL}/`);\n  check(res1, {\n    'status is 200': (r) => r.status === 200,\n  });\n\n  sleep(1);\n\n  const res2 = http.get(`${BASE_URL}/api/data`);\n  check(res2, {\n    'api status ok': (r) => r.status === 200 || r.status === 404,\n  });\n\n  sleep(1);\n}\n",
+      "config": { "users": 10, "spawn_rate": 2, "duration": "30s" }
+    },
+    {
+      "id": "k6-auth",
+      "name": "Auth Flow",
+      "description": "Log in during setup, then call an API with a bearer token.",
+      "script": "/**\n * Loom starter — Auth Flow (k6).\n */\n\nimport http from 'k6/http';\nimport { check, sleep } from 'k6';\n\nexport const options = {\n  vus: 10,\n  duration: '60s',\n  thresholds: {\n    http_req_duration: ['p(95)<500'],\n  },\n};\n\nexport function setup() {\n  const BASE_URL = __ENV.TARGET_HOST || 'http://localhost:8080';\n  const res = http.post(`${BASE_URL}/login`, JSON.stringify({\n    username: 'demo',\n    password: 'demo',\n  }), { headers: { 'Content-Type': 'application/json' } });\n  const token = res.status === 200 ? res.json('token') || '' : '';\n  return { token };\n}\n\nexport default function (data) {\n  const BASE_URL = __ENV.TARGET_HOST || 'http://localhost:8080';\n  const headers = data.token ? { Authorization: `Bearer ${data.token}` } : {};\n  const res = http.get(`${BASE_URL}/api/profile`, { headers });\n  check(res, {\n    'profile status ok': (r) => r.status === 200 || r.status === 401,\n  });\n  sleep(1);\n}\n",
+      "config": { "users": 10, "spawn_rate": 2, "duration": "60s" }
+    },
+    {
+      "id": "k6-soak",
+      "name": "Soak Test",
+      "description": "Steady load over staged ramps to catch leaks and drift.",
+      "script": "/**\n * Loom starter — Soak Test (k6).\n */\n\nimport http from 'k6/http';\nimport { check, sleep } from 'k6';\n\nexport const options = {\n  stages: [\n    { duration: '1m', target: 20 },\n    { duration: '3m', target: 20 },\n    { duration: '1m', target: 0 },\n  ],\n  thresholds: {\n    http_req_duration: ['p(95)<800'],\n    http_req_failed: ['rate<0.01'],\n  },\n};\n\nexport default function () {\n  const BASE_URL = __ENV.TARGET_HOST || 'http://localhost:8080';\n  const res = http.get(`${BASE_URL}/api/data`);\n  check(res, {\n    'status ok': (r) => r.status === 200 || r.status === 404,\n  });\n  sleep(1);\n}\n",
+      "config": { "users": 20, "spawn_rate": 4, "duration": "60s" }
+    }
+  ],
+  "goose": [
+    {
+      "id": "goose-basic",
+      "name": "Basic Scenario",
+      "description": "Browse the index and status endpoints with Goose transactions.",
+      "script": "//! Loom starter — Basic Scenario (Goose).\n//!\n//! Run with: cargo run --release -- --host http://localhost:8080\n//!\n//! Requires: goose = \"0.18\"\n\nuse goose::prelude::*;\n\n#[tokio::main]\nasync fn main() -> Result<(), GooseError> {\n    GooseAttack::initialize()?\n        .register_scenario(\n            scenario!(\"BrowseUsers\")\n                .register_transaction(transaction!(browse_index))\n                .register_transaction(transaction!(browse_status)),\n        )\n        .execute()\n        .await?;\n\n    Ok(())\n}\n\nasync fn browse_index(user: &mut GooseUser) -> TransactionResult {\n    let _ = user.get(\"/\").await?;\n    Ok(())\n}\n\nasync fn browse_status(user: &mut GooseUser) -> TransactionResult {\n    let _ = user.get(\"/api/v1/status\").await?;\n    Ok(())\n}\n",
+      "config": { "users": 10, "spawn_rate": 2, "duration": "30s" }
+    }
+  ]
+}
