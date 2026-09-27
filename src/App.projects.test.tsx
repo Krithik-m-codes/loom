@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "./types";
-import { getRunHistory, listEngines, subscribeToRunFinished } from "./lib/ipc";
+import { getRunHistory, listEngines, listProjects, listSuites, subscribeToRunFinished } from "./lib/ipc";
 
 const { startRun } = vi.hoisted(() => ({ startRun: vi.fn() }));
 vi.mock("./lib/ipc", () => ({
@@ -10,6 +10,8 @@ vi.mock("./lib/ipc", () => ({
     { id: "locust", display_name: "Locust", engine_language: "Python", license: "MIT", license_tier: "Core", supported_script_languages: ["Python"], availability: { Ready: {} } },
     { id: "k6", display_name: "k6", engine_language: "JavaScript", license: "AGPL-3.0", license_tier: "Plugin", supported_script_languages: ["JavaScript"], availability: { Ready: {} } },
   ]),
+  listProjects: vi.fn().mockResolvedValue([]),
+  listSuites: vi.fn().mockResolvedValue([]),
   startRun,
   stopRun: vi.fn(),
   saveScript: vi.fn(),
@@ -31,12 +33,25 @@ const configuredProject: Project = {
 };
 const emptyProject: Project = { ...configuredProject, id: "user-empty", name: "Empty Project", targetHost: "https://empty.test", suites: [] };
 
+// Seed the SQLite-backed project store: listProjects returns the rows,
+// listSuites returns each project's suites, mirroring the Task 3 IPC layer.
+const seedProjects = (seed: Project[]) => {
+  vi.mocked(listProjects).mockResolvedValue(seed);
+  vi.mocked(listSuites).mockImplementation(async (projectId: string) =>
+    seed.find((project) => project.id === projectId)?.suites ?? [],
+  );
+};
+
 beforeEach(() => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
   localStorage.clear();
   localStorage.setItem("loom_onboarding_completed", "true");
   startRun.mockReset();
   vi.mocked(listEngines).mockClear();
+  vi.mocked(listProjects).mockReset();
+  vi.mocked(listProjects).mockResolvedValue([]);
+  vi.mocked(listSuites).mockReset();
+  vi.mocked(listSuites).mockResolvedValue([]);
   vi.mocked(getRunHistory).mockReset();
   vi.mocked(getRunHistory).mockResolvedValue([]);
   vi.mocked(subscribeToRunFinished).mockReset();
@@ -50,47 +65,50 @@ beforeEach(() => {
 describe("project startup and run gating", () => {
   it("mounts a fresh install with no demo project or runnable script", async () => {
     const user = userEvent.setup();
+    seedProjects([]);
     render(<App />);
 
+    await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
     expect(screen.queryByText("E-Commerce Benchmark")).not.toBeInTheDocument();
     expect(screen.queryByText("API Gateway & Auth Stress")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /New/i }));
     expect(screen.getByRole("dialog", { name: "Create load testing project" })).toBeVisible();
     expect(startRun).not.toHaveBeenCalled();
-    await waitFor(() => expect(localStorage.getItem("loom_projects")).toBe("[]"));
+    expect(localStorage.getItem("loom_projects")).toBeNull();
   });
 
-  it("survives invalid saved JSON without launching a demo project", () => {
-    localStorage.setItem("loom_projects", "{broken");
+  it("survives a project-store failure without launching a demo project", async () => {
+    vi.mocked(listProjects).mockRejectedValueOnce(new Error("sqlite unavailable"));
     render(<App />);
 
+    await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled();
-    expect(localStorage.getItem("loom_projects")).toBe("{broken");
+    expect(screen.queryByText("E-Commerce Benchmark")).not.toBeInTheDocument();
+    expect(localStorage.getItem("loom_projects")).toBeNull();
   });
 
   it("clears the active script and disallows run after selecting a project with no suites", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("loom_projects", JSON.stringify([configuredProject, emptyProject]));
-    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    seedProjects([configuredProject, emptyProject]);
     render(<App />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /Configured Project/ }));
     await user.click(screen.getByRole("menuitemradio", { name: /Empty Project/ }));
-    expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://empty.test");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://empty.test"));
     expect(startRun).not.toHaveBeenCalled();
   });
 
   it("restores the selected suite engine before running a saved project", async () => {
     const user = userEvent.setup();
     const k6Project: Project = { ...configuredProject, defaultEngine: "k6", suites: [{ ...configuredProject.suites[0], engine: "k6", scriptPath: "tests/smoke.js", config: { ...configuredProject.suites[0].config, engine: "k6", script_path: "tests/smoke.js" } }] };
-    localStorage.setItem("loom_projects", JSON.stringify([k6Project]));
-    localStorage.setItem("loom_active_project_id", k6Project.id);
+    seedProjects([k6Project]);
     startRun.mockResolvedValue("run-1");
     render(<App />);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Run Test" }));
     await waitFor(() => expect(startRun).toHaveBeenCalledWith("k6", expect.objectContaining({ engine: "k6", script_path: "tests/smoke.js" })));
   });
@@ -105,14 +123,14 @@ describe("project startup and run gating", () => {
           config: { project_name: "Configured Project", engine: "locust", script_path: "tests/wrong.py", load_profile: { users: 42, spawn_rate: 7, duration: "3m" }, target: { host: "https://k6.test", headers: { "X-K6": "yes" } } } },
       ],
     };
-    localStorage.setItem("loom_projects", JSON.stringify([twoSuiteProject]));
-    localStorage.setItem("loom_active_project_id", twoSuiteProject.id);
+    localStorage.setItem("loom_onboarding_completed", "true");
+    seedProjects([twoSuiteProject]);
     startRun.mockResolvedValue("run-k6");
     render(<App />);
 
-    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://locust.test");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://locust.test"));
     await user.click(screen.getByRole("button", { name: /K6 Scenario/ }));
-    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test"));
     await user.click(screen.getAllByRole("button", { name: "Run Test" })[0]);
 
     await waitFor(() => expect(startRun).toHaveBeenCalledExactlyOnceWith("k6", {
@@ -128,13 +146,13 @@ describe("project startup and run gating", () => {
     const user = userEvent.setup();
     const k6Suite = { id: "suite-k6", name: "K6 Scenario", engine: "k6", scriptPath: "tests/k6.js",
       config: { project_name: "Configured Project", engine: "k6", script_path: "tests/k6.js", load_profile: { users: 32, spawn_rate: 4, duration: "2m" }, target: { host: "https://k6.test", headers: { "X-K6": "yes" } } } };
-    localStorage.setItem("loom_projects", JSON.stringify([{ ...configuredProject, suites: [configuredProject.suites[0], k6Suite] }]));
-    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    seedProjects([{ ...configuredProject, suites: [configuredProject.suites[0], k6Suite] }]);
     startRun.mockResolvedValue("run-k6");
     render(<App />);
 
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://configured.test"));
     await user.click(await screen.findByRole("button", { name: /k6.*Plugin/i }));
-    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test"));
     await user.click(screen.getByRole("button", { name: "Run Test" }));
     await waitFor(() => expect(startRun).toHaveBeenCalledExactlyOnceWith("k6", {
       project_name: "Configured Project", engine: "k6", script_path: "tests/k6.js",
@@ -145,8 +163,7 @@ describe("project startup and run gating", () => {
 
   it("blocks a history run whose selected engine conflicts with its config", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
-    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    seedProjects([configuredProject]);
     vi.mocked(getRunHistory).mockResolvedValue([{
       id: "run-mismatch", engine: "k6", project: "Configured Project",
       config: JSON.stringify(configuredProject.suites[0].config),
@@ -161,28 +178,25 @@ describe("project startup and run gating", () => {
     expect(startRun).not.toHaveBeenCalled();
   });
 
-  it("keeps unknown saved records after migrating demos and creating a project", async () => {
+  it("creates a project from the modal and selects it in a fresh database", async () => {
     const user = userEvent.setup();
-    const unknownRecord = { id: "future-project", customSchema: { nodes: [1, 2] } };
-    localStorage.setItem("loom_projects", JSON.stringify([{ ...configuredProject, id: "proj-ecommerce" }, unknownRecord]));
-    localStorage.setItem("loom_active_project_id", "proj-ecommerce");
+    seedProjects([]);
     render(<App />);
 
-    await waitFor(() => expect(JSON.parse(localStorage.getItem("loom_projects") ?? "[]")).toEqual([unknownRecord]));
+    await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
     await user.click(screen.getByRole("button", { name: /New/i }));
     await user.type(screen.getByRole("textbox", { name: "Project name" }), "Created workspace");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
 
-    expect(JSON.parse(localStorage.getItem("loom_projects") ?? "[]")).toEqual([
-      expect.objectContaining({ name: "Created workspace" }), unknownRecord,
-    ]);
+    expect(screen.queryByRole("dialog", { name: "Create load testing project" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Created workspace/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled();
   });
 
   it("does not run a saved k6 script through a different installed engine", async () => {
     const user = userEvent.setup();
     const k6Project: Project = { ...configuredProject, defaultEngine: "k6", suites: [{ ...configuredProject.suites[0], engine: "k6", scriptPath: "tests/smoke.js", config: { ...configuredProject.suites[0].config, engine: "k6", script_path: "tests/smoke.js" } }] };
-    localStorage.setItem("loom_projects", JSON.stringify([k6Project]));
-    localStorage.setItem("loom_active_project_id", k6Project.id);
+    seedProjects([k6Project]);
     vi.mocked(listEngines).mockResolvedValue([{ id: "locust", display_name: "Locust", engine_language: "Python", license: "MIT", license_tier: "Core", supported_script_languages: ["Python"], availability: { Ready: {} } }]);
     render(<App />);
 
@@ -194,8 +208,7 @@ describe("project startup and run gating", () => {
 
   it("keeps a script draft mounted while switching workspace tabs and closes inactive tabs", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
-    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    seedProjects([configuredProject]);
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "Script editor" }));
@@ -250,8 +263,7 @@ describe("project startup and run gating", () => {
 
   it("refreshes mounted History after a run finishes without discarding its tab", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
-    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    seedProjects([configuredProject]);
     let finishRun: ((payload: { run_id: string; status: string }) => void) | undefined;
     vi.mocked(subscribeToRunFinished).mockImplementation(async (callback) => {
       finishRun = callback;
