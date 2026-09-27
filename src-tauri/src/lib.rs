@@ -536,13 +536,15 @@ fn update_project(
     target_host: Option<String>,
     default_engine: Option<String>,
 ) -> Result<ProjectRecord, String> {
+    let name = name.map(|n| n.trim().to_string());
+    let target_host = target_host.map(|h| h.trim().to_string());
     if let Some(ref n) = name {
-        if n.trim().is_empty() {
+        if n.is_empty() {
             return Err("Project name must not be empty".into());
         }
     }
     if let Some(ref h) = target_host {
-        if h.trim().is_empty() {
+        if h.is_empty() {
             return Err("Target host must not be empty".into());
         }
     }

@@ -308,4 +308,38 @@ describe("project startup and run gating", () => {
     expect(await screen.findByText(/run-new/)).toBeVisible();
     expect(screen.getAllByRole("tab", { name: "History" })).toHaveLength(1);
   });
+
+  it("opens a palette suite from another project by switching projects first", async () => {
+    const user = userEvent.setup();
+    const projectA: Project = {
+      ...configuredProject, id: "proj-a", name: "Project A", targetHost: "https://a.test",
+      suites: [{ ...configuredProject.suites[0], id: "suite-a", projectId: "proj-a" }],
+    };
+    const projectB: Project = {
+      ...configuredProject, id: "proj-b", name: "Project B", targetHost: "https://b.test", defaultEngine: "k6",
+      suites: [{ id: "suite-b", projectId: "proj-b", name: "B Suite", engine: "k6", scriptPath: "tests/b.js",
+        config: { project_name: "Project B", engine: "k6", script_path: "tests/b.js",
+          load_profile: { users: 5, spawn_rate: 2, duration: "1m" }, target: { host: "https://b.test" } } }],
+    };
+    seedProjects([projectA, projectB]);
+    vi.mocked(getSuite).mockImplementation(async (id: string) => {
+      const suite = id === "suite-b" ? projectB.suites[0] : projectA.suites[0];
+      return { ...suite, projectId: id === "suite-b" ? projectB.id : projectA.id, scriptContent: `// ${id} script`, visualNodes: undefined };
+    });
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: /Project A/ })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Quick actions" }));
+    await user.click(await screen.findByRole("option", { name: "Open suite: B Suite" }));
+
+    // The project switched to B (suites re-fetched for B, header follows B)...
+    await waitFor(() => expect(vi.mocked(listSuites)).toHaveBeenCalledWith("proj-b"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Project B/ })).toBeVisible());
+    // ...and the editor opened suite B, not a same-project fallback.
+    expect(vi.mocked(getSuite)).toHaveBeenCalledWith("suite-b");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://b.test"));
+    expect(screen.getByRole("tab", { name: "Editor" })).toHaveAttribute("aria-selected", "true");
+  });
 });

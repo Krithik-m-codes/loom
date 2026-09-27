@@ -286,6 +286,22 @@ function AppShell() {
     });
   };
 
+  const handleOpenSuite = async (suite: TestSuite) => {
+    const targetProjectId = suite.projectId ?? activeProjectId;
+    if (targetProjectId !== activeProjectId && projects.some((project) => project.id === targetProjectId)) {
+      // Cross-project open: switch first via the existing project handler, then
+      // open the suite directly — projects/activeProjectId state is stale until
+      // the switch re-renders, so handleSelectScript's active-project lookup
+      // cannot be reused here.
+      await handleSelectProject(targetProjectId);
+      setActiveSuiteId(suite.id);
+      setSelectedEngineId(suite.engine);
+      setConfig(configForSuite(suite));
+      return;
+    }
+    handleSelectScript(suite.scriptPath, suite.engine);
+  };
+
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const canRun = Boolean(
     activeProject && config.engine === selectedEngineId && config.script_path.trim() && config.target.host.trim() &&
@@ -566,7 +582,7 @@ function AppShell() {
         projects={projects}
         onSelectProject={handleSelectProject}
         onOpenNewSuite={() => setIsNewSuiteOpen(true)}
-        onOpenSuite={handleSelectScript}
+        onOpenSuite={handleOpenSuite}
       />
 
       {/* 4. Professional Setup / Onboarding Wizard */}

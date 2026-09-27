@@ -1179,6 +1179,14 @@ git commit -m "feat: kubus-inspired shell with guided flow, dock, and issues"
 
 ---
 
+## Accepted deviations
+
+1. Monaco: loader-served default bundle instead of direct ESM side-effect imports (v0.57 removed those paths; `pnpm build` proof).
+2. `updatedAt?: string` optional in TS (required broke 5 out-of-scope constructors; Rust always sends it; Task 9+ supply real values).
+3. `RunDetailsDrawer` shows the raw config string when JSON parse fails (arguably more useful than the planned `"No config recorded"` fallback).
+
+---
+
 ## Self-Review
 
 **1. Spec coverage:** §1 SQLite schema → Task 1 DDL + Task 2 IPC. §2 ten IPC commands → Task 2 (all named). §3 frontend arch + mock removal → Tasks 3, 4, 10. §4 Monaco → Task 5. §5 EditorView tabs → Task 6. §6 templates → Task 8. §7 project/suite UI → Task 9. §8 demo removal → Tasks 3, 10. §9 visual builder props → Task 7. §10 testing → Tasks 1–11 each carry tests. §11 acceptance criteria → Task 11 E2E. Non-goals (code→visual parsing, git, sync) are excluded.

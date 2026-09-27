@@ -112,6 +112,7 @@ export interface TestSuite {
   name: string;
   engine: string;
   scriptPath: string;
+  projectId?: string;
   config: TestConfig;
   updatedAt?: string;
 }

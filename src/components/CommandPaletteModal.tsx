@@ -13,7 +13,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import type { Project } from "../types";
+import type { Project, TestSuite } from "../types";
 
 interface CommandPaletteModalProps {
   isOpen: boolean;
@@ -27,7 +27,7 @@ interface CommandPaletteModalProps {
   projects?: Project[];
   onSelectProject?: (projectId: string) => void;
   onOpenNewSuite?: () => void;
-  onOpenSuite?: (script: string, engine: string) => void;
+  onOpenSuite?: (suite: TestSuite) => void | Promise<void>;
 }
 
 export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
@@ -206,11 +206,17 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
             {projects.some((project) => project.suites.length > 0) && (
               <Command.Group heading="Suites" className="loom-command__group">
-                {projects.flatMap((project) => project.suites).map((suite) => (
+                {projects.flatMap((project) =>
+                  project.suites.map((suite) => ({ ...suite, projectId: suite.projectId ?? project.id })),
+                ).map((suite) => (
                   <Command.Item
                     key={suite.id}
                     onSelect={() => {
-                      (onOpenSuite ?? onSelectScript)(suite.scriptPath, suite.engine);
+                      if (onOpenSuite) {
+                        void onOpenSuite(suite);
+                      } else {
+                        onSelectScript(suite.scriptPath, suite.engine);
+                      }
                       onSelectTab("editor");
                       onClose();
                     }}
