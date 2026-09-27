@@ -9,6 +9,7 @@ import {
   Square,
   Globe,
 } from "lucide-react";
+import { LoomButton } from "./ui/LoomButton";
 
 interface TopNavProps {
   activeTab: string;
@@ -48,9 +49,8 @@ export const TopNav = ({
   ];
 
   return (
-    <div className="h-[52px] bg-[#141518] border-b border-[#26282D] flex items-center justify-between px-4 select-none">
-      {/* Horizontal Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto h-full pt-1.5">
+    <header className="loom-topbar">
+      <nav className="loom-topbar__tabs" aria-label="Workspace views" role="tablist">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -59,58 +59,54 @@ export const TopNav = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`h-[42px] flex items-center gap-2 px-3.5 rounded-t-[6px] text-[13px] font-medium transition-all border-t border-x relative ${
-                isActive
-                  ? "bg-[#0A0A0B] border-[#26282D] text-[#E8E9EB] font-semibold border-b-transparent shadow-sm after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2.5px] after:bg-[#A3E635] after:rounded-full"
-                  : "bg-transparent border-transparent text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-              }`}
+              className={`loom-tab ${isActive ? "loom-tab--active" : ""}`}
+              role="tab"
+              aria-selected={isActive}
             >
-              <Icon className={`w-4 h-4 ${isActive ? "text-[#A3E635]" : "text-[#5C6068]"}`} />
-              <span className="truncate max-w-[150px]">{tab.label}</span>
+              <Icon aria-hidden="true" size={16} />
+              <span className="loom-truncate">{tab.label}</span>
               {tab.suffix && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1E22] text-[#A3E635] border border-[#26282D] uppercase font-semibold">
+                <span className="loom-engine-tag">
                   {tab.suffix}
                 </span>
               )}
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Target & Action Quick Controls (Right side) */}
-      <div className="flex items-center gap-3">
-        {/* Environment / Target Selector */}
-        <div className="flex items-center gap-2 px-3 h-[36px] rounded-[6px] bg-[#1C1E22] border border-[#26282D] focus-within:border-[#A3E635]/60 focus-within:ring-1 focus-within:ring-[#A3E635]/30 text-[12px] font-mono transition-all">
-          <Globe className="w-3.5 h-3.5 text-[#A3E635]" />
-          <span className="text-[#9CA0A8]">target:</span>
+      <div className="loom-topbar__actions">
+        <label className="loom-target-input">
+          <Globe aria-hidden="true" size={15} />
+          <span>Target</span>
           <input
+            aria-label="Target host"
             type="text"
             value={targetHost}
             onChange={(e) => onChangeTargetHost(e.target.value)}
             placeholder="http://localhost:8080"
-            className="bg-transparent text-[#E8E9EB] outline-none w-[180px] text-[12px] font-mono"
           />
-        </div>
+        </label>
 
-        {/* Run / Stop Button */}
         {isRunning ? (
-          <button
+          <LoomButton
             onClick={onStopTest}
-            className="btn-danger h-[36px] text-[13px] px-4 font-semibold"
+            className="loom-topbar__run"
+            variant="danger"
           >
-            <Square className="w-3.5 h-3.5 fill-current" />
+            <Square aria-hidden="true" size={14} fill="currentColor" />
             <span>Stop Test</span>
-          </button>
+          </LoomButton>
         ) : (
-          <button
+          <LoomButton
             onClick={onRunTest}
-            className="btn-primary h-[36px] text-[13px] px-5 font-bold tracking-wide"
+            className="loom-topbar__run"
           >
-            <Play className="w-3.5 h-3.5 fill-current" />
+            <Play aria-hidden="true" size={14} fill="currentColor" />
             <span>Run Test</span>
-          </button>
+          </LoomButton>
         )}
       </div>
-    </div>
+    </header>
   );
 };

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FolderPlus, Globe, X, Zap } from "lucide-react";
-import { EngineInfo, Project, TestSuite } from "../../types";
+import type { EngineInfo, Project, TestSuite } from "../../types";
+import { LoomButton } from "../ui/LoomButton";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -9,12 +10,7 @@ interface NewProjectModalProps {
   onCreateProject: (project: Project) => void;
 }
 
-export const NewProjectModal = ({
-  isOpen,
-  onClose,
-  engines,
-  onCreateProject,
-}: NewProjectModalProps) => {
+export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: NewProjectModalProps) => {
   const [name, setName] = useState("");
   const [targetHost, setTargetHost] = useState("http://localhost:8080");
   const [selectedEngine, setSelectedEngine] = useState("locust");
@@ -25,8 +21,8 @@ export const NewProjectModal = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!name.trim()) return;
 
     const projectId = `proj-${Date.now()}`;
@@ -43,18 +39,12 @@ export const NewProjectModal = ({
         project_name: name,
         engine: selectedEngine,
         script_path: scriptPath,
-        load_profile: {
-          users,
-          spawn_rate: spawnRate,
-          duration,
-        },
-        target: {
-          host: targetHost,
-        },
+        load_profile: { users, spawn_rate: spawnRate, duration },
+        target: { host: targetHost },
       },
     };
 
-    const newProject: Project = {
+    onCreateProject({
       id: projectId,
       name: name.trim(),
       description: description.trim() || "Load testing suite",
@@ -62,185 +52,113 @@ export const NewProjectModal = ({
       defaultEngine: selectedEngine,
       createdAt: new Date().toISOString(),
       suites: [defaultSuite],
-    };
-
-    onCreateProject(newProject);
+    });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-in fade-in duration-150">
-      <div className="w-[560px] max-w-[95vw] bg-[#141518] border border-[#26282D] rounded-[10px] shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="p-5 border-b border-[#26282D] flex items-center justify-between bg-[#1C1E22]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[6px] bg-[#A3E635]/15 border border-[#A3E635]/30 flex items-center justify-center text-[#A3E635]">
-              <FolderPlus className="w-5 h-5" />
-            </div>
+    <div className="loom-modal-backdrop loom-modal-backdrop--centered">
+      <div className="loom-modal loom-project-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title">
+        <header className="loom-project-modal__header">
+          <div className="loom-project-modal__heading">
+            <span className="loom-project-modal__icon"><FolderPlus aria-hidden="true" size={20} /></span>
             <div>
-              <h3 className="text-base font-bold text-[#E8E9EB]">Create Load Testing Project</h3>
-              <p className="text-[12px] text-[#9CA0A8] mt-0.5">
-                Set up a new target system, concurrency parameters, and test suites
-              </p>
+              <h2 id="new-project-title">Create load testing project</h2>
+              <p>Set a target, initial concurrency, and a default engine-ready suite.</p>
             </div>
           </div>
+          <LoomButton type="button" variant="ghost" className="loom-icon-button" onClick={onClose} aria-label="Close project creation dialog">
+            <X aria-hidden="true" size={18} />
+          </LoomButton>
+        </header>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-[4px] text-[#5C6068] hover:text-[#E8E9EB] hover:bg-[#26282D] transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4 max-h-[480px] overflow-y-auto">
-          {/* Project Name */}
-          <div>
-            <label className="text-[12px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-              Project Name *
-            </label>
+        <form onSubmit={handleSubmit} className="loom-project-form">
+          <div className="loom-form-field">
+            <label htmlFor="project-name">Project name <span aria-hidden="true">*</span></label>
             <input
+              id="project-name"
+              aria-label="Project name"
+              className="loom-input"
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Checkout Service Stress, Auth API Concurrency"
-              className="w-full h-[38px] px-3.5 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] text-[13.5px] outline-none focus:border-[#A3E635] focus:ring-1 focus:ring-[#A3E635]/30"
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Checkout Service Stress"
               autoFocus
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="text-[12px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-              Description (Optional)
-            </label>
+          <div className="loom-form-field">
+            <label htmlFor="project-description">Description <span className="loom-form-field__optional">optional</span></label>
             <input
+              id="project-description"
+              className="loom-input"
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(event) => setDescription(event.target.value)}
               placeholder="e.g. Multi-endpoint user journey load test"
-              className="w-full h-[38px] px-3.5 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] text-[13px] outline-none focus:border-[#A3E635] focus:ring-1 focus:ring-[#A3E635]/30"
             />
           </div>
 
-          {/* Target Host */}
-          <div>
-            <label className="text-[12px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-[#A3E635]" />
-              <span>Base Target Host URL *</span>
-            </label>
+          <div className="loom-form-field">
+            <label htmlFor="project-target"><Globe aria-hidden="true" size={14} /> Base target host URL <span aria-hidden="true">*</span></label>
             <input
+              id="project-target"
+              className="loom-input loom-mono"
               type="text"
               required
               value={targetHost}
-              onChange={(e) => setTargetHost(e.target.value)}
-              placeholder="http://localhost:8080 or https://api.staging.example.com"
-              className="w-full h-[38px] px-3.5 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635] focus:ring-1 focus:ring-[#A3E635]/30"
+              onChange={(event) => setTargetHost(event.target.value)}
+              placeholder="https://api.staging.example.com"
             />
           </div>
 
-          {/* Engine Selection */}
-          <div>
-            <label className="text-[12px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-[#A3E635]" />
-              <span>Default Load Testing Engine</span>
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {engines.map((eng) => {
-                const isSelected = selectedEngine === eng.id;
+          <fieldset className="loom-form-field">
+            <legend><Zap aria-hidden="true" size={14} /> Default load testing engine</legend>
+            <div className="loom-engine-choice-grid">
+              {engines.map((engine) => {
+                const selected = selectedEngine === engine.id;
                 return (
                   <button
-                    key={eng.id}
+                    key={engine.id}
                     type="button"
-                    onClick={() => setSelectedEngine(eng.id)}
-                    className={`p-3 rounded-[6px] border text-left flex flex-col justify-between transition-all ${
-                      isSelected
-                        ? "bg-[#1C1E22] border-[#A3E635] ring-1 ring-[#A3E635]/40 shadow-sm"
-                        : "bg-[#1C1E22]/60 border-[#26282D] hover:border-[#3A3D44]"
-                    }`}
+                    onClick={() => setSelectedEngine(engine.id)}
+                    className={`loom-engine-choice ${selected ? "loom-engine-choice--active" : ""}`}
+                    aria-pressed={selected}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-[13px] text-[#E8E9EB]">{eng.display_name}</span>
-                      <span
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase font-semibold ${
-                          eng.license_tier === "Plugin"
-                            ? "bg-[#F5A623]/15 text-[#F5A623]"
-                            : "bg-[#A3E635]/15 text-[#A3E635]"
-                        }`}
-                      >
-                        {eng.license_tier}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-[#5C6068] font-mono">{eng.engine_language}</span>
+                    <span className="loom-engine-choice__header">
+                      <strong>{engine.display_name}</strong>
+                      <span className={`loom-engine-tier loom-engine-tier--${engine.license_tier.toLowerCase()}`}>{engine.license_tier}</span>
+                    </span>
+                    <span>{engine.engine_language}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
-          {/* Initial Load Profile */}
-          <div className="grid grid-cols-3 gap-3.5 pt-2 border-t border-[#26282D]">
-            <div>
-              <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                Initial Users (VUs)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="5000"
-                value={users}
-                onChange={(e) => setUsers(parseInt(e.target.value) || 10)}
-                className="w-full h-[36px] px-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-              />
+          <fieldset className="loom-project-form__load-profile">
+            <legend>Initial load profile</legend>
+            <div className="loom-project-form__load-grid">
+              <div className="loom-form-field">
+                <label htmlFor="project-users">Initial users</label>
+                <input id="project-users" className="loom-input loom-mono" type="number" min="1" max="5000" value={users} onChange={(event) => setUsers(parseInt(event.target.value) || 10)} />
+              </div>
+              <div className="loom-form-field">
+                <label htmlFor="project-spawn-rate">Spawn rate / sec</label>
+                <input id="project-spawn-rate" className="loom-input loom-mono" type="number" min="1" max="100" value={spawnRate} onChange={(event) => setSpawnRate(parseInt(event.target.value) || 1)} />
+              </div>
+              <div className="loom-form-field">
+                <label htmlFor="project-duration">Duration</label>
+                <input id="project-duration" className="loom-input loom-mono" type="text" value={duration} onChange={(event) => setDuration(event.target.value)} placeholder="e.g. 1m, 5m, 30s" />
+              </div>
             </div>
+          </fieldset>
 
-            <div>
-              <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                Spawn Rate (/s)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={spawnRate}
-                onChange={(e) => setSpawnRate(parseInt(e.target.value) || 1)}
-                className="w-full h-[36px] px-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                Duration
-              </label>
-              <input
-                type="text"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="e.g. 1m, 5m, 30s"
-                className="w-full h-[36px] px-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-              />
-            </div>
-          </div>
-
-          {/* Footer Actions */}
-          <div className="pt-4 border-t border-[#26282D] flex items-center justify-end gap-3 mt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary text-[13px] px-4"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="btn-primary text-[13px] px-5 font-bold tracking-wide shadow-lg shadow-[#A3E635]/20"
-            >
-              <span>Create Project</span>
-            </button>
-          </div>
+          <footer className="loom-project-form__actions">
+            <LoomButton type="button" variant="secondary" onClick={onClose}>Cancel</LoomButton>
+            <LoomButton type="submit" disabled={!name.trim()}>Create Project</LoomButton>
+          </footer>
         </form>
       </div>
     </div>

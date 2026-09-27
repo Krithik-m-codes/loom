@@ -1,21 +1,22 @@
 import { useState } from "react";
 import {
-  LayoutDashboard,
-  Workflow,
-  Zap,
-  FileCode2,
-  Settings,
-  FolderOpen,
   ChevronDown,
   ChevronRight,
-  History,
-  Terminal,
   Cpu,
-  Plus,
+  FileCode2,
+  FolderOpen,
+  History,
   Layers,
+  LayoutDashboard,
+  Plus,
+  Settings,
+  Terminal,
+  Workflow,
+  Zap,
 } from "lucide-react";
-import { EngineInfo, Project } from "../types";
+import type { EngineInfo, Project } from "../types";
 import { LoomLogo } from "./LoomLogo";
+import { StatusBadge } from "./ui/StatusBadge";
 
 interface SidebarProps {
   engines: EngineInfo[];
@@ -50,208 +51,148 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const [samplesExpanded, setSamplesExpanded] = useState(true);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
 
-  const activeProject =
-    projects.find((p) => p.id === activeProjectId) || projects[0];
+  const navSections = [
+    { label: "Platform", items: [{ id: "dashboard", label: "Dashboard", Icon: LayoutDashboard }] },
+    {
+      label: "Design & authoring",
+      items: [
+        { id: "flowchart", label: "Visual flow", Icon: Workflow },
+        { id: "editor", label: "Script editor", Icon: FileCode2 },
+      ],
+    },
+    {
+      label: "Execution & history",
+      items: [
+        { id: "runner", label: "Test runner", Icon: Zap },
+        { id: "history", label: "Run history", Icon: History },
+      ],
+    },
+  ];
 
   return (
-    <aside className="w-[270px] min-w-[270px] h-full bg-[#141518] border-r border-[#26282D] flex flex-col select-none text-[13.5px]">
-      {/* App Workspace Banner with New Loom Logo */}
-      <div className="h-[56px] px-4 border-b border-[#26282D] flex items-center justify-between bg-[#141518]">
-        <LoomLogo size={30} showText={true} />
-
-        {isRunning && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F5A623]/15 border border-[#F5A623]/30 text-[#F5A623] text-[11px] font-mono font-semibold tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-[#F5A623] pulse" />
-            <span>RUNNING</span>
-          </div>
-        )}
+    <aside className="loom-sidebar" aria-label="Loom workspace navigation">
+      <div className="loom-sidebar__brand">
+        <LoomLogo size={30} showText />
+        {isRunning && <StatusBadge status="running" label="Running" />}
       </div>
 
-      {/* Workspace / Active Project Switcher */}
-      <div className="p-3 border-b border-[#26282D] bg-[#141518]">
-        <div className="flex items-center justify-between text-[11px] font-mono font-semibold uppercase tracking-wider text-[#5C6068] mb-1.5 px-1">
-          <span>Active Project</span>
-          <button
-            onClick={onOpenNewProject}
-            className="flex items-center gap-1 text-[#A3E635] hover:text-[#B4F04A] transition-colors"
-            title="Create New Project"
-          >
-            <Plus className="w-3.5 h-3.5" />
+      <section className="loom-sidebar__project" aria-label="Active project">
+        <div className="loom-sidebar__project-heading">
+          <span>Active project</span>
+          <button type="button" onClick={onOpenNewProject} className="loom-sidebar__new-project">
+            <Plus aria-hidden="true" size={14} />
             <span>New</span>
           </button>
         </div>
 
-        <div className="relative">
+        <div className="loom-project-switcher">
           <button
-            onClick={() => setProjectMenuOpen(!projectMenuOpen)}
-            className="w-full h-[36px] px-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] hover:border-[#3A3D44] flex items-center justify-between text-left text-[13px] text-[#E8E9EB] font-medium transition-all shadow-sm"
+            type="button"
+            onClick={() => setProjectMenuOpen((open) => !open)}
+            className="loom-project-switcher__trigger"
+            aria-expanded={projectMenuOpen}
           >
-            <div className="flex items-center gap-2 truncate">
-              <Layers className="w-4 h-4 text-[#A3E635] shrink-0" />
-              <span className="truncate">{activeProject?.name || "Default Project"}</span>
-            </div>
-            <ChevronDown className="w-3.5 h-3.5 text-[#9CA0A8] shrink-0 ml-1" />
+            <span className="loom-project-switcher__name">
+              <Layers aria-hidden="true" size={16} />
+              <span className="loom-truncate">{activeProject?.name ?? "Default Project"}</span>
+            </span>
+            <ChevronDown aria-hidden="true" size={15} />
           </button>
 
-          {/* Project Dropdown Menu */}
           {projectMenuOpen && (
-            <div className="absolute top-[40px] left-0 right-0 z-30 bg-[#1C1E22] border border-[#26282D] rounded-[6px] shadow-xl p-1 flex flex-col gap-0.5 animate-in fade-in duration-100">
-              {projects.map((proj) => {
-                const isSelected = proj.id === activeProject?.id;
+            <div className="loom-project-switcher__menu" role="menu">
+              {projects.map((project) => {
+                const selected = project.id === activeProject?.id;
                 return (
                   <button
-                    key={proj.id}
+                    key={project.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
                     onClick={() => {
-                      onSelectProject(proj.id);
+                      onSelectProject(project.id);
                       setProjectMenuOpen(false);
                     }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-[4px] text-[12.5px] truncate flex items-center justify-between ${
-                      isSelected
-                        ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold"
-                        : "text-[#E8E9EB] hover:bg-[#26282D]"
-                    }`}
+                    className={`loom-project-switcher__option ${selected ? "loom-project-switcher__option--active" : ""}`}
                   >
-                    <span className="truncate">{proj.name}</span>
-                    <span className="text-[10px] font-mono text-[#5C6068]">
-                      {proj.suites.length} suites
-                    </span>
+                    <span className="loom-truncate">{project.name}</span>
+                    <span>{project.suites.length} suites</span>
                   </button>
                 );
               })}
-
-              <div className="border-t border-[#26282D] mt-1 pt-1">
-                <button
-                  onClick={() => {
-                    setProjectMenuOpen(false);
-                    onOpenNewProject();
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-[4px] text-[12px] text-[#A3E635] hover:bg-[#A3E635]/15 flex items-center gap-1.5 font-semibold"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create New Project...</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setProjectMenuOpen(false);
+                  onOpenNewProject();
+                }}
+                className="loom-project-switcher__create"
+              >
+                <Plus aria-hidden="true" size={14} />
+                Create new project
+              </button>
             </div>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Main Navigation */}
-      <div className="p-3 border-b border-[#26282D] flex flex-col gap-1">
-        <div className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#5C6068] px-2.5 py-1">
-          Platform
-        </div>
-
-        <button
-          onClick={() => onSelectTab("dashboard")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[6px] text-left transition-all ${
-            activeTab === "dashboard"
-              ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold shadow-sm border border-[#A3E635]/25"
-              : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-          }`}
-        >
-          <LayoutDashboard className="w-[18px] h-[18px] shrink-0" />
-          <span>Overview Dashboard</span>
-        </button>
-
-        <div className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#5C6068] px-2.5 py-1 mt-2">
-          Design & Authoring
-        </div>
-
-        <button
-          onClick={() => onSelectTab("flowchart")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[6px] text-left transition-all ${
-            activeTab === "flowchart"
-              ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold shadow-sm border border-[#A3E635]/25"
-              : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-          }`}
-        >
-          <Workflow className="w-[18px] h-[18px] shrink-0" />
-          <span>Visual Flowchart</span>
-        </button>
-
-        <button
-          onClick={() => onSelectTab("editor")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[6px] text-left transition-all ${
-            activeTab === "editor"
-              ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold shadow-sm border border-[#A3E635]/25"
-              : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-          }`}
-        >
-          <FileCode2 className="w-[18px] h-[18px] shrink-0" />
-          <span>Script Editor</span>
-        </button>
-
-        <div className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#5C6068] px-2.5 py-1 mt-2">
-          Execution & History
-        </div>
-
-        <button
-          onClick={() => onSelectTab("runner")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[6px] text-left transition-all ${
-            activeTab === "runner"
-              ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold shadow-sm border border-[#A3E635]/25"
-              : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-          }`}
-        >
-          <Zap className="w-[18px] h-[18px] shrink-0" />
-          <span>Test Runner & Telemetry</span>
-        </button>
-
-        <button
-          onClick={() => onSelectTab("history")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[6px] text-left transition-all ${
-            activeTab === "history"
-              ? "bg-[#A3E635]/15 text-[#A3E635] font-semibold shadow-sm border border-[#A3E635]/25"
-              : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-          }`}
-        >
-          <History className="w-[18px] h-[18px] shrink-0" />
-          <span>Run History & Audit</span>
-        </button>
-      </div>
-
-      {/* Explorer / Active Project Test Suites */}
-      <div className="flex-1 overflow-y-auto p-3">
-        <div className="mb-4">
-          <div
-            onClick={() => setSamplesExpanded(!samplesExpanded)}
-            className="flex items-center gap-2 px-2.5 py-1 text-[11px] font-mono font-semibold uppercase tracking-wider text-[#9CA0A8] cursor-pointer hover:text-[#E8E9EB] transition-colors"
-          >
-            {samplesExpanded ? (
-              <ChevronDown className="w-4 h-4 text-[#A3E635]" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-[#5C6068]" />
-            )}
-            <FolderOpen className="w-4 h-4 text-[#A3E635]" />
-            <span>Suites ({activeProject?.suites.length || 0})</span>
+      <nav className="loom-sidebar__nav" aria-label="Primary navigation">
+        {navSections.map((section) => (
+          <div className="loom-sidebar__nav-group" key={section.label}>
+            <span className="loom-sidebar__section-label">{section.label}</span>
+            {section.items.map(({ id, label, Icon }) => {
+              const selected = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSelectTab(id)}
+                  className={`loom-nav-item ${selected ? "loom-nav-item--active" : ""}`}
+                  aria-current={selected ? "page" : undefined}
+                >
+                  <Icon aria-hidden="true" size={17} />
+                  <span className="loom-truncate">{label}</span>
+                </button>
+              );
+            })}
           </div>
+        ))}
+      </nav>
+
+      <section className="loom-sidebar__explorer" aria-label="Project suites and engines">
+        <div className="loom-sidebar__explorer-section">
+          <button
+            type="button"
+            onClick={() => setSamplesExpanded((expanded) => !expanded)}
+            className="loom-sidebar__explorer-heading"
+            aria-expanded={samplesExpanded}
+          >
+            {samplesExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
+            <FolderOpen aria-hidden="true" size={16} />
+            <span>Suites ({activeProject?.suites.length ?? 0})</span>
+          </button>
 
           {samplesExpanded && activeProject && (
-            <div className="mt-1.5 flex flex-col gap-1 pl-3.5 border-l border-[#26282D] ml-4">
+            <div className="loom-sidebar__suite-list">
               {activeProject.suites.map((suite) => {
-                const isSelected = selectedScript === suite.scriptPath;
+                const selected = selectedScript === suite.scriptPath;
                 return (
                   <button
                     key={suite.id}
+                    type="button"
                     onClick={() => {
                       onSelectScript(suite.scriptPath, suite.engine);
                       onSelectTab("runner");
                     }}
-                    className={`flex items-center justify-between px-2.5 py-2 rounded-[5px] text-left transition-colors ${
-                      isSelected
-                        ? "bg-[#1C1E22] text-[#A3E635] font-medium border border-[#3A3D44]"
-                        : "text-[#9CA0A8] hover:bg-[#1C1E22] hover:text-[#E8E9EB]"
-                    }`}
+                    className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <Zap className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-[#A3E635]" : "text-[#5C6068]"}`} />
-                      <span className="truncate text-[13px]">{suite.name}</span>
-                    </div>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#0A0A0B] text-[#9CA0A8] border border-[#26282D] uppercase">
-                      {suite.engine}
+                    <span className="loom-sidebar__suite-name">
+                      <Zap aria-hidden="true" size={14} />
+                      <span className="loom-truncate">{suite.name}</span>
                     </span>
+                    <span className="loom-engine-tag">{suite.engine}</span>
                   </button>
                 );
               })}
@@ -259,86 +200,51 @@ export const Sidebar = ({
           )}
         </div>
 
-        {/* Registered Engines Section */}
-        <div className="mt-4">
-          <div className="px-2.5 py-1 text-[11px] font-mono font-semibold uppercase tracking-wider text-[#9CA0A8] flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-[#A3E635]" />
-              <span>Engines</span>
-            </span>
-            <span className="text-[10px] font-mono text-[#5C6068]">
-              {engines.length} REGISTERED
-            </span>
+        <div className="loom-sidebar__explorer-section">
+          <div className="loom-sidebar__engines-heading">
+            <span><Cpu aria-hidden="true" size={15} /> Engines</span>
+            <span>{engines.length} registered</span>
           </div>
-
-          <div className="mt-2 flex flex-col gap-1.5">
-            {engines.map((eng) => {
-              const isSelected = selectedEngineId === eng.id;
-              const isReady = "Ready" in eng.availability;
-              const isPlugin = eng.license_tier === "Plugin";
-
+          <div className="loom-sidebar__engine-list">
+            {engines.map((engine) => {
+              const selected = selectedEngineId === engine.id;
+              const ready = "Ready" in engine.availability;
               return (
-                <div
-                  key={eng.id}
-                  onClick={() => onSelectEngine(eng.id)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-[6px] cursor-pointer transition-all ${
-                    isSelected
-                      ? "bg-[#1C1E22] border border-[#3A3D44] text-[#E8E9EB] shadow-sm"
-                      : "hover:bg-[#1C1E22]/60 text-[#9CA0A8] border border-transparent"
-                  }`}
+                <button
+                  key={engine.id}
+                  type="button"
+                  onClick={() => onSelectEngine(engine.id)}
+                  className={`loom-engine-row ${selected ? "loom-engine-row--active" : ""}`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                        isReady ? "bg-[#4ADE80] shadow-[0_0_8px_rgba(74,222,128,0.5)]" : "bg-[#F5A623]"
-                      }`}
-                    />
-                    <span className="font-medium text-[13px] text-[#E8E9EB]">{eng.display_name}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {isPlugin ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#F5A623]/10 text-[#F5A623] border border-[#F5A623]/25 font-mono font-medium">
-                        Plugin
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#A3E635]/10 text-[#A3E635] border border-[#A3E635]/25 font-mono font-medium">
-                        Core
-                      </span>
-                    )}
-                  </div>
-                </div>
+                  <span className="loom-engine-row__name">
+                    <span className="loom-engine-row__availability" data-ready={ready} aria-hidden="true" />
+                    <span className="loom-truncate">{engine.display_name}</span>
+                  </span>
+                  <span className={`loom-engine-tier loom-engine-tier--${engine.license_tier.toLowerCase()}`}>
+                    {engine.license_tier}
+                  </span>
+                </button>
               );
             })}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Sidebar Footer */}
-      <div className="p-3 border-t border-[#26282D] flex items-center justify-between bg-[#0A0A0B]">
-        <button
-          onClick={onOpenCmdk}
-          className="flex items-center gap-2 text-[#9CA0A8] hover:text-[#E8E9EB] transition-colors text-[12px] font-medium"
-        >
-          <Terminal className="w-4 h-4 text-[#A3E635]" />
-          <span>Quick Actions</span>
-          <span className="font-mono bg-[#1C1E22] px-2 py-0.5 rounded border border-[#3A3D44] text-[11px] text-[#E8E9EB]">
-            Ctrl+K
-          </span>
+      <footer className="loom-sidebar__footer">
+        <button type="button" onClick={onOpenCmdk} className="loom-sidebar__quick-actions">
+          <Terminal aria-hidden="true" size={16} />
+          <span>Quick actions</span>
+          <kbd>Ctrl K</kbd>
         </button>
-
         <button
+          type="button"
           onClick={() => onSelectTab("engines")}
-          className={`p-2 rounded-[6px] transition-colors ${
-            activeTab === "engines"
-              ? "text-[#A3E635] bg-[#1C1E22] border border-[#A3E635]/30"
-              : "text-[#9CA0A8] hover:text-[#E8E9EB] hover:bg-[#1C1E22]"
-          }`}
-          title="Engine Configuration"
+          className={`loom-sidebar__settings ${activeTab === "engines" ? "loom-sidebar__settings--active" : ""}`}
+          aria-label="Engine configuration"
         >
-          <Settings className="w-4 h-4" />
+          <Settings aria-hidden="true" size={16} />
         </button>
-      </div>
+      </footer>
     </aside>
   );
 };
