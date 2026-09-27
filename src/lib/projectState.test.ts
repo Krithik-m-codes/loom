@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project } from "../types";
-import { loadProjectState, projectConfigForSelection } from "./projectState";
+import { projectConfigForSelection } from "./projectState";
 
 const userProject: Project = {
   id: "customer-workspace",
@@ -31,64 +31,7 @@ const otherProject: Project = {
   suites: [],
 };
 
-describe("saved project initialization", () => {
-  it("starts with no projects or active selection on a fresh install", () => {
-    expect(loadProjectState(null, null)).toEqual({ projects: [], persistedProjects: [], activeProjectId: "", shouldPersist: true });
-    expect(projectConfigForSelection([], "").script_path).toBe("");
-  });
-
-  it("removes only the two exact shipped demo IDs and retains user data deeply", () => {
-    const input = [
-      { ...userProject, id: "proj-ecommerce" },
-      userProject,
-      { ...userProject, id: "proj-gateway" },
-      otherProject,
-    ];
-    const result = loadProjectState(JSON.stringify(input), "customer-workspace");
-
-    expect(result.projects).toEqual([userProject, otherProject]);
-    expect(result.persistedProjects).toEqual([userProject, otherProject]);
-    expect(result.activeProjectId).toBe("customer-workspace");
-    expect(result.shouldPersist).toBe(true);
-  });
-
-  it.each(["proj-ecommerce", "proj-gateway", "missing-project"])(
-    "selects a surviving project when active ID %s is unavailable",
-    (activeId) => {
-      expect(loadProjectState(JSON.stringify([userProject]), activeId).activeProjectId).toBe("customer-workspace");
-    },
-  );
-
-  it("does not invent a project when only demos were saved", () => {
-    const result = loadProjectState(JSON.stringify([{ ...userProject, id: "proj-ecommerce" }]), "proj-ecommerce");
-    expect(result.projects).toEqual([]);
-    expect(result.activeProjectId).toBe("");
-  });
-
-  it("retains unknown saved values verbatim when migrating demo IDs", () => {
-    const futureProject = { id: "future-project", customSchema: { nodes: [1, { id: "a" }] } };
-    const malformedValue = "unrecognized legacy value";
-    const input = [{ ...userProject, id: "proj-gateway" }, userProject, futureProject, malformedValue];
-    const result = loadProjectState(JSON.stringify(input), "proj-gateway");
-
-    expect(result.projects).toEqual([userProject]);
-    expect(result.persistedProjects).toEqual([userProject, futureProject, malformedValue]);
-    expect(result.shouldPersist).toBe(true);
-  });
-
-  it("keeps malformed project records in storage but excludes them from UI selection", () => {
-    const invalidProject = { ...userProject, id: "partially-written", suites: [{ id: "broken", config: { target: null } }] };
-    const result = loadProjectState(JSON.stringify([invalidProject]), "partially-written");
-
-    expect(result.persistedProjects).toEqual([invalidProject]);
-    expect(result.projects).toEqual([]);
-    expect(result.activeProjectId).toBe("");
-  });
-
-  it("survives corrupt project JSON without replacing it during initialization", () => {
-    expect(loadProjectState("{broken", "customer-workspace")).toEqual({ projects: [], persistedProjects: [], activeProjectId: "", shouldPersist: false });
-  });
-
+describe("project config selection", () => {
   it("clears a stale script when selecting a project with no suites", () => {
     const config = projectConfigForSelection([otherProject], "another-workspace");
     expect(config.project_name).toBe("Another workspace");
@@ -114,5 +57,11 @@ describe("saved project initialization", () => {
     });
     expect(conflictingProject.suites[0].config.engine).toBe("locust");
     expect(conflictingProject.suites[0].config.script_path).toBe("tests/wrong.py");
+  });
+
+  it("derives fallback config when a project has no suites", () => {
+    const cfg = projectConfigForSelection([], "");
+    expect(cfg.engine).toBe("locust");
+    expect(cfg.script_path).toBe("");
   });
 });

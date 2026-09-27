@@ -12,6 +12,8 @@ import { OnboardingWizard } from "./components/setup/OnboardingWizard";
 import { NewProjectModal } from "./components/projects/NewProjectModal";
 import {
   listEngines,
+  listProjects,
+  listSuites,
   startRun,
   stopRun,
   saveScript,
@@ -21,7 +23,7 @@ import {
   subscribeToRunFinished,
 } from "./lib/ipc";
 import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig } from "./types";
-import { configForSuite, loadProjectState, projectConfigForSelection } from "./lib/projectState";
+import { configForSuite, projectConfigForSelection } from "./lib/projectState";
 
 export default function App() {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
@@ -89,25 +91,12 @@ export default function App() {
     }
   };
 
-  // Projects state
-  const [initialProjectState] = useState(() => {
-    try {
-      return loadProjectState(localStorage.getItem("loom_projects"), localStorage.getItem("loom_active_project_id"));
-    } catch {
-      return loadProjectState(null, null);
-    }
-  });
-  const [projects, setProjects] = useState<Project[]>(initialProjectState.projects);
-  const [persistedProjects, setPersistedProjects] = useState<unknown[]>(initialProjectState.persistedProjects);
-  const [activeProjectId, setActiveProjectId] = useState<string>(initialProjectState.activeProjectId);
-
-  useEffect(() => {
-    if (!initialProjectState.shouldPersist) return;
-    try {
-      localStorage.setItem("loom_projects", JSON.stringify(initialProjectState.persistedProjects));
-      localStorage.setItem("loom_active_project_id", initialProjectState.activeProjectId);
-    } catch {}
-  }, [initialProjectState]);
+  // Projects state (loaded from SQLite via IPC; empty in non-Tauri browser preview)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string>("");
+  const [activeSuiteId, setActiveSuiteId] = useState<string | null>(null);
+  // Suite selection source of truth for later tasks (Editor, modals, shell); read there.
+  void activeSuiteId;
 
   // Professional Onboarding Wizard state
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
@@ -125,6 +114,38 @@ export default function App() {
   // Load engines on mount
   useEffect(() => {
     loadEngineList();
+  }, []);
+
+  // Load projects and suites from SQLite on mount
+  useEffect(() => {
+    let cancelled = false;
+    const loadProjectsAndSuites = async () => {
+      try {
+        const loaded = await listProjects();
+        if (cancelled) return;
+        setProjects(loaded);
+        if (loaded.length === 0) return;
+        const first = loaded[0];
+        setActiveProjectId(first.id);
+        try {
+          const suites = await listSuites(first.id);
+          if (cancelled) return;
+          const merged = loaded.map((p) => (p.id === first.id ? { ...p, suites } : p));
+          setProjects(merged);
+          const nextConfig = projectConfigForSelection(merged, first.id);
+          setSelectedEngineId(nextConfig.engine);
+          setConfig(nextConfig);
+        } catch (err) {
+          console.error("Failed to list suites:", err);
+        }
+      } catch (err) {
+        console.error("Failed to list projects:", err);
+      }
+    };
+    loadProjectsAndSuites();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadEngineList = async () => {
@@ -191,28 +212,30 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const handleSelectProject = (projectId: string) => {
+  const handleSelectProject = async (projectId: string) => {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
     setActiveProjectId(projectId);
+    setActiveSuiteId(null);
     try {
-      localStorage.setItem("loom_active_project_id", projectId);
-    } catch {}
-    const nextConfig = projectConfigForSelection(projects, projectId);
-    setSelectedEngineId(nextConfig.engine);
-    setConfig(nextConfig);
+      const suites = await listSuites(projectId);
+      const merged = projects.map((p) => (p.id === projectId ? { ...p, suites } : p));
+      setProjects(merged);
+      const nextConfig = projectConfigForSelection(merged, projectId);
+      setSelectedEngineId(nextConfig.engine);
+      setConfig(nextConfig);
+    } catch (err) {
+      console.error("Failed to list suites:", err);
+      const nextConfig = projectConfigForSelection(projects, projectId);
+      setSelectedEngineId(nextConfig.engine);
+      setConfig(nextConfig);
+    }
   };
 
   const handleCreateProject = (newProj: Project) => {
     const updated = [newProj, ...projects];
-    const updatedStored = [newProj, ...persistedProjects];
     setProjects(updated);
-    setPersistedProjects(updatedStored);
     setActiveProjectId(newProj.id);
-    try {
-      localStorage.setItem("loom_projects", JSON.stringify(updatedStored));
-      localStorage.setItem("loom_active_project_id", newProj.id);
-    } catch {}
     const nextConfig = projectConfigForSelection(updated, newProj.id);
     setSelectedEngineId(nextConfig.engine);
     setConfig(nextConfig);
@@ -227,6 +250,7 @@ export default function App() {
   const handleSelectScript = (path: string, engine: string) => {
     setSelectedEngineId(engine);
     const suite = projects.find((project) => project.id === activeProjectId)?.suites.find((entry) => entry.engine === engine && entry.scriptPath === path);
+    setActiveSuiteId(suite ? suite.id : null);
     setConfig((prev) => suite ? configForSuite(suite) : {
       ...prev,
       engine,
