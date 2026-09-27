@@ -49,7 +49,7 @@ system-installed engine; Loom's managed runtime is preferred when provisioned.
 
 | Engine | Managed components | Run boundary |
 | --- | --- | --- |
-| Locust | Isolated Python runtime and virtual environment containing Locust | Loom launches the environment's Locust executable as a subprocess |
+| Locust | Verified Astral `uv` bootstrap, pinned managed CPython distribution, and isolated virtual environment containing pinned Locust | Loom launches the environment's Locust executable as a subprocess |
 | Goose | Rust stable toolchain, Cargo cache, and generated scenario project dependencies | Cargo builds and runs the scenario as a subprocess separate from Loom |
 | k6 | Optional upstream k6 release binary for the current OS and architecture | Loom launches the separately acquired k6 executable as a subprocess |
 
@@ -59,8 +59,11 @@ Goose into the Loom executable.
 
 ## Acquisition, consent, and licensing
 
-- Locust and its Python runtime are acquired from pinned, documented upstream
-  releases into a Loom-owned isolated environment.
+- The `uv` bootstrap executable is acquired from a pinned Astral release and
+  verified against its published checksum. `uv` installs a pinned CPython
+  build into Loom-managed storage and creates an isolated environment containing
+  pinned Locust. The Python build identifier and exact Locust version are part
+  of Loom's manifest.
 - Rust is acquired through the official rustup distribution and installed into
   Loom-managed per-user Rust and Cargo homes. Cargo downloads Goose dependencies
   while preparing a Goose scenario.
@@ -68,9 +71,12 @@ Goose into the Loom executable.
   selects k6 and accepts the separate AGPL-3.0 notice, Loom fetches the matching
   platform release from Grafana's official release source. Loom records the
   installed version and links to the license and source.
-- Every downloaded archive uses HTTPS and is checked against a pinned version
-  and upstream-published checksum before extraction or execution. A missing or
-  mismatched checksum fails closed with an actionable retry/error message.
+- Every archive downloaded and extracted directly by Loom uses HTTPS and is
+  checked against a pinned version and upstream-published checksum before
+  extraction or execution. A missing or mismatched checksum fails closed with
+  an actionable retry/error message. Bootstrap-managed Python and Rust
+  components must be pinned and verified by their bootstrap tool's documented
+  signature/checksum mechanism, then pass an exact-version probe before use.
 - The package manifest records supported versions, platform/architecture
   artifacts, checksums, upstream URLs, and license metadata. Updating the
   manifest is a reviewed source change.
@@ -155,8 +161,9 @@ website pages cannot replace the React workspace bundled into the desktop app.
   the staging directory.
 - Downloads and launched child processes use argument arrays, not shell command
   strings. The Runtime Manager never invokes an elevated shell.
-- Artifact checksums are verified before extraction. Release metadata is pinned
-  in the application source and updated through reviewed changes.
+- Artifact checksums or upstream signatures are verified before activation.
+  Release metadata is pinned in the application source and updated through
+  reviewed changes.
 - Runtime installation sends no Loom telemetry. The app stores runtime versions
   and installation status locally.
 - k6 consent is explicit and separate from Loom's EULA. License/source
@@ -206,5 +213,10 @@ website pages cannot replace the React workspace bundled into the desktop app.
   https://book.goose.rs/getting-started/running.html
 - Locust supports installation from PyPI with pip:
   https://docs.locust.io/en/2.32.4/installation.html
+- Astral `uv` publishes per-platform executables and SHA-256 checksums, and can
+  provision managed Python installations:
+  https://github.com/astral-sh/uv/releases
+- Astral's managed Python distributions are provided by python-build-standalone:
+  https://github.com/indygreg/python-build-standalone
 - Grafana publishes platform-specific k6 packages and standalone binaries:
   https://grafana.com/docs/k6/latest/set-up/install-k6/
