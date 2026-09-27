@@ -390,10 +390,27 @@ fn get_run_metrics(
     Ok(metrics)
 }
 
+fn validate_script_path(path: &std::path::Path) -> Result<(), String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let allowed_exts = ["py", "js", "ts", "rs", "json", "csv", "md", "txt"];
+    if !allowed_exts.contains(&ext.as_str()) {
+        return Err(format!(
+            "Access denied: extension '.{}' is not permitted for test scripts",
+            ext
+        ));
+    }
+    Ok(())
+}
+
 /// Read a test script file from disk.
 #[tauri::command]
 async fn read_script(file_path: String) -> Result<String, String> {
     let path = PathBuf::from(&file_path);
+    validate_script_path(&path)?;
     tokio::fs::read_to_string(&path)
         .await
         .map_err(|e| format!("Failed to read script {file_path}: {e}"))
@@ -403,6 +420,7 @@ async fn read_script(file_path: String) -> Result<String, String> {
 #[tauri::command]
 async fn save_script(file_path: String, content: String) -> Result<(), String> {
     let path = PathBuf::from(&file_path);
+    validate_script_path(&path)?;
     if let Some(parent) = path.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
