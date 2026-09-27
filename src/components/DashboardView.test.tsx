@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { EngineInfo } from "../types";
 import { DashboardView } from "./DashboardView";
+import { getRunHistory } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({ getRunHistory: vi.fn().mockResolvedValue([]) }));
 
@@ -35,5 +36,20 @@ describe("DashboardView", () => {
     expect(designFlow).toHaveClass("loom-button");
     await user.click(designFlow);
     expect(onNavigate).toHaveBeenCalledWith("flowchart");
+  });
+
+  it("refreshes recent activity when a completed run changes the history revision", async () => {
+    vi.mocked(getRunHistory).mockReset();
+    vi.mocked(getRunHistory).mockResolvedValue([]);
+    const props = { engines: [locust], onNavigate: vi.fn(), onSelectEngine: vi.fn(), targetHost: "https://example.test", onRerun: vi.fn() };
+    const { rerender } = render(<DashboardView {...props} refreshRevision={0} />);
+    await waitFor(() => expect(getRunHistory).toHaveBeenCalledTimes(1));
+    vi.mocked(getRunHistory).mockResolvedValue([{
+      id: "fresh-run", engine: "locust", project: "Billing", config: "{}",
+      started_at: "2026-09-27T00:00:00.000Z", finished_at: "2026-09-27T00:00:30.000Z", status: "finished",
+    }]);
+
+    rerender(<DashboardView {...props} refreshRevision={1} />);
+    expect(await screen.findByText("Billing")).toBeVisible();
   });
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { TopNav } from "./components/TopNav";
 import { DashboardView } from "./components/DashboardView";
@@ -29,6 +29,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [openTabs, setOpenTabs] = useState<string[]>(["dashboard"]);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [isNarrowWindow, setIsNarrowWindow] = useState(() => window.innerWidth <= 760);
+  const [runHistoryRevision, setRunHistoryRevision] = useState(0);
+  const navigationToggleRef = useRef<HTMLButtonElement>(null);
+  const navigationDrawerRef = useRef<HTMLDivElement>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [metrics, setMetrics] = useState<NormalizedMetric[]>([]);
@@ -48,6 +52,41 @@ export default function App() {
     const remaining = openTabs.filter((id) => id !== tab);
     setOpenTabs(remaining);
     if (activeTab === tab) setActiveTab(remaining[remaining.length - 1] ?? "dashboard");
+  };
+
+  useEffect(() => {
+    const updateWindowSize = () => setIsNarrowWindow(window.innerWidth <= 760);
+    window.addEventListener("resize", updateWindowSize);
+    return () => window.removeEventListener("resize", updateWindowSize);
+  }, []);
+
+  useEffect(() => {
+    if (!isNarrowWindow) setNavigationOpen(false);
+  }, [isNarrowWindow]);
+
+  useEffect(() => {
+    if (!navigationOpen || !isNarrowWindow) return;
+    navigationDrawerRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+    return () => {
+      const activeElement = document.activeElement;
+      if (activeElement === document.body || navigationDrawerRef.current?.contains(activeElement) ||
+        activeElement?.classList.contains("loom-sidebar-backdrop")) navigationToggleRef.current?.focus();
+    };
+  }, [navigationOpen, isNarrowWindow]);
+
+  const handleDrawerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const buttons = Array.from(navigationDrawerRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+    if (buttons.length === 0) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   };
 
   // Projects state
@@ -125,6 +164,7 @@ export default function App() {
       unlistenFinished = await subscribeToRunFinished((_payload) => {
         setIsRunning(false);
         setActiveRunId(null);
+        setRunHistoryRevision((revision) => revision + 1);
       });
     };
 
@@ -290,7 +330,9 @@ export default function App() {
 
   return (
     <div className="loom-app-shell select-none">
-      <a className="loom-skip-link" href="#main-content">Skip to workspace content</a>
+      <a className="loom-skip-link" href="#main-content" inert={navigationOpen && isNarrowWindow}>
+        Skip to workspace content
+      </a>
       <TopNav
         activeTab={activeTab}
         openTabs={openTabs}
@@ -307,6 +349,8 @@ export default function App() {
         onOpenCmdk={() => setIsCmdkOpen(true)}
         onToggleNavigation={() => setNavigationOpen((open) => !open)}
         navigationOpen={navigationOpen}
+        navigationToggleRef={navigationToggleRef}
+        backgroundInert={navigationOpen && isNarrowWindow}
         isRunning={isRunning}
         canRun={canRun}
         onRunTest={handleRunTest}
@@ -316,25 +360,30 @@ export default function App() {
         activeTestName={config.script_path.split("/").pop() || "Test"}
       />
 
-      <div className={`loom-sidebar-slot ${navigationOpen ? "is-open" : ""}`}>
+      <div className={`loom-sidebar-slot ${navigationOpen ? "is-open" : ""}`}
+        ref={navigationDrawerRef}
+        role={navigationOpen && isNarrowWindow ? "dialog" : undefined}
+        aria-modal={navigationOpen && isNarrowWindow ? true : undefined}
+        aria-label={navigationOpen && isNarrowWindow ? "Workspace navigation" : undefined}
+        onKeyDown={handleDrawerKeyDown}>
         <Sidebar
           engines={engines}
           selectedEngineId={selectedEngineId}
           onSelectEngine={handleSelectEngine}
           activeTab={activeTab}
           onSelectTab={openWorkspaceTab}
-          onOpenCmdk={() => setIsCmdkOpen(true)}
+          onOpenCmdk={() => { setNavigationOpen(false); setIsCmdkOpen(true); }}
           selectedScript={config.script_path}
           onSelectScript={handleSelectScript}
           projects={projects}
           activeProjectId={activeProjectId}
-          onOpenNewProject={() => setIsNewProjectOpen(true)}
+          onOpenNewProject={() => { setNavigationOpen(false); setIsNewProjectOpen(true); }}
         />
       </div>
-      {navigationOpen && <button type="button" className="loom-sidebar-backdrop"
-        aria-label="Close workspace navigation" onClick={() => setNavigationOpen(false)} />}
+      {navigationOpen && <button type="button" className="loom-sidebar-backdrop" tabIndex={-1}
+        aria-hidden="true" onClick={() => setNavigationOpen(false)} />}
 
-      <div className="loom-workspace">
+      <div className="loom-workspace" inert={navigationOpen && isNarrowWindow}>
         {flowExportError && <p className="loom-action-error" role="alert">{flowExportError}</p>}
         <div id="main-content" className="loom-workspace__content" tabIndex={-1}>
           {openTabs.includes("dashboard") && (
@@ -342,6 +391,7 @@ export default function App() {
               className="loom-workspace__panel" hidden={activeTab !== "dashboard"}>
               <DashboardView
                 engines={engines}
+                refreshRevision={runHistoryRevision}
                 onNavigate={openWorkspaceTab}
                 onSelectEngine={handleSelectEngine}
                 targetHost={config.target.host}
@@ -397,7 +447,7 @@ export default function App() {
           {openTabs.includes("history") && (
             <div id="workspace-panel-history" role="tabpanel" aria-labelledby="workspace-tab-history"
               className="loom-workspace__panel" hidden={activeTab !== "history"}>
-              <HistoryView onRerun={handleRerun} />
+              <HistoryView onRerun={handleRerun} refreshRevision={runHistoryRevision} />
             </div>
           )}
 

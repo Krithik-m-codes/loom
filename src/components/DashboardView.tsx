@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -22,32 +22,39 @@ import { StatusBadge } from "./ui/StatusBadge";
 
 interface DashboardViewProps {
   engines: EngineInfo[];
+  refreshRevision?: number;
   onNavigate: (tab: string) => void;
   onSelectEngine: (id: string) => void;
   targetHost: string;
   onRerun: (engine: string, config: string) => void;
 }
 
-export const DashboardView = ({ engines, onNavigate, onSelectEngine, targetHost, onRerun }: DashboardViewProps) => {
+export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSelectEngine, targetHost, onRerun }: DashboardViewProps) => {
   const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const requestSequence = useRef(0);
   const [cpuUsage, setCpuUsage] = useState(22);
   const [memUsage, setMemUsage] = useState(41);
 
   const loadRecentRuns = async () => {
+    const request = ++requestSequence.current;
     setLoading(true);
     try {
       const runs = await getRunHistory();
-      setRecentRuns(runs.slice(0, 6));
+      if (request === requestSequence.current) setRecentRuns(runs.slice(0, 6));
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (request === requestSequence.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadRecentRuns();
+    void loadRecentRuns();
+    return () => { requestSequence.current += 1; };
+  }, [refreshRevision]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       setCpuUsage((previous) => Math.min(85, Math.max(15, previous + (Math.random() * 6 - 3))));
       setMemUsage((previous) => Math.min(75, Math.max(30, previous + (Math.random() * 2 - 1))));

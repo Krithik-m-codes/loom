@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2026-09-27
+
+### Added
+- **Multi-Format Packaging & Installers**:
+  - Windows: NSIS interactive setup installer (`.exe`), Enterprise WiX installer (`.msi`), and portable zip archive (`.zip`).
+  - Linux: Debian/Ubuntu package (`.deb`), Universal standalone AppImage (`.AppImage`), and portable tarball.
+  - macOS: Apple Disk Image installer (`.dmg`) and `.app.tar.gz` bundle.
+- **Unified Visual System & Accessible UI Primitives**:
+  - Reusable primitive components: `LoomButton`, `MetricCard`, `Panel`, `TelemetryPanel`, `StatusBadge`, and `SearchInput`.
+  - Over 3,000 lines of structured CSS tokens in `src/index.css` following the Bruno-inspired Electric Lime (`#A3E635`) palette.
+  - Complete adoption of official high-resolution geometric woven branding assets.
+- **Automated Frontend Test Suite & Governance**:
+  - Vitest and React Testing Library foundation with 15 test suites and 19 unit tests across all main views and primitives.
+  - Automated design token audit script (`scripts/audit-design-tokens.mjs`) and test to prevent styling drift.
+- **Loom Runtime Manager Architecture Specification**:
+  - Comprehensive design specification for automated engine detection, zero-friction local installation, and process isolation.
+
+### Changed
+- **Subprocess Isolation Architecture**:
+  - Refactored `engine-goose` to execute generated scenario projects as external subprocesses, completely removing embedded engine threads and ensuring 100% subprocess isolation.
+  - Completely redesigned all application surfaces (`RunnerView`, `DashboardView`, `FlowchartBuilderView`, `ScriptEditorView`, `EnginesView`, `HistoryView`, `Sidebar`, `TopNav`, and modals) to consume modular primitives instead of inline Tailwind utilities.
+
+---
+
 ## [0.1.0] - 2026-09-17
 
 ### Added

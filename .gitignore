@@ -49,4 +49,7 @@ desktop.ini
 .tempmediaStorage/
 scratch/
 
+# Subagent-driven development workspaces (ledgers, briefs, review packages)
+.superpowers/
+
 /target-visual-check

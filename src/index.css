@@ -1311,6 +1311,10 @@
 .loom-contextbar__engine:focus-within { border-color: var(--loom-primary); }
 .loom-contextbar__run-status { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 4.75rem; color: var(--loom-text-secondary); font-size: 0.75rem; }
 .loom-contextbar__status-dot { display: block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--loom-text-muted); }
+.loom-contextbar__engine-state { display: inline-flex; min-width: 0; max-width: 13rem; align-items: center; gap: 0.4rem; color: var(--loom-text-secondary); font-size: 0.6875rem; }
+.loom-contextbar__engine-state > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loom-contextbar__engine-state.is-ready .loom-contextbar__status-dot { background: var(--loom-green); }
+.loom-contextbar__engine-state.is-missing .loom-contextbar__status-dot { background: var(--loom-warning); }
 .loom-contextbar__run-status.is-running { color: var(--loom-text); }
 .loom-contextbar__run-status.is-running .loom-contextbar__status-dot { background: var(--loom-green); animation: loom-pulse 1.2s var(--loom-ease-out) infinite; }
 
@@ -1335,7 +1339,7 @@
 .loom-workspace-tab__close { width: 1.75rem; height: 1.75rem; margin-inline: 0.125rem 0.375rem; }
 .loom-workspace-tabs__add { position: relative; flex: 0 0 auto; align-self: center; }
 .loom-workspace-tabs__add-button { width: 2rem; height: 2rem; }
-.loom-workspace-tabs__menu { position: absolute; z-index: 35; top: calc(100% + 0.375rem); left: 0; display: grid; min-width: 10rem; border: 1px solid var(--loom-border-hover); border-radius: var(--loom-radius-control); background: var(--loom-surface-elevated); box-shadow: var(--loom-shadow-floating); padding: 0.25rem; }
+.loom-workspace-tabs__menu { position: fixed; z-index: 35; display: grid; border: 1px solid var(--loom-border-hover); border-radius: var(--loom-radius-control); background: var(--loom-surface-elevated); box-shadow: var(--loom-shadow-floating); padding: 0.25rem; }
 .loom-workspace-tabs__menu button { border: 0; border-radius: var(--loom-radius-small); background: transparent; color: var(--loom-text); padding: 0.5rem; text-align: start; }
 .loom-workspace-tabs__menu button:hover { background: color-mix(in srgb, var(--loom-primary) 10%, transparent); }
 .loom-workspace-tabs__menu p { margin: 0; color: var(--loom-text-secondary); font-size: 0.75rem; padding: 0.5rem; }

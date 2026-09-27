@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "./types";
-import { getRunHistory, listEngines } from "./lib/ipc";
+import { getRunHistory, listEngines, subscribeToRunFinished } from "./lib/ipc";
 
 const { startRun } = vi.hoisted(() => ({ startRun: vi.fn() }));
 vi.mock("./lib/ipc", () => ({
@@ -32,12 +32,15 @@ const configuredProject: Project = {
 const emptyProject: Project = { ...configuredProject, id: "user-empty", name: "Empty Project", targetHost: "https://empty.test", suites: [] };
 
 beforeEach(() => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
   localStorage.clear();
   localStorage.setItem("loom_onboarding_completed", "true");
   startRun.mockReset();
   vi.mocked(listEngines).mockClear();
   vi.mocked(getRunHistory).mockReset();
   vi.mocked(getRunHistory).mockResolvedValue([]);
+  vi.mocked(subscribeToRunFinished).mockReset();
+  vi.mocked(subscribeToRunFinished).mockResolvedValue(() => {});
   vi.mocked(listEngines).mockResolvedValue([
     { id: "locust", display_name: "Locust", engine_language: "Python", license: "MIT", license_tier: "Core", supported_script_languages: ["Python"], availability: { Ready: {} } },
     { id: "k6", display_name: "k6", engine_language: "JavaScript", license: "AGPL-3.0", license_tier: "Plugin", supported_script_languages: ["JavaScript"], availability: { Ready: {} } },
@@ -221,5 +224,52 @@ describe("project startup and run gating", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     await user.keyboard("{Escape}");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("traps mobile drawer focus, isolates background controls, and restores the toggle", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const toggle = screen.getByRole("button", { name: "Toggle workspace navigation" });
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    const drawer = screen.getByRole("dialog", { name: "Workspace navigation" });
+    const first = within(drawer).getByRole("button", { name: "New project" });
+    const last = within(drawer).getByRole("button", { name: "Engine configuration" });
+    expect(first).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: "Overview", hidden: true }).closest(".loom-workspace")).toHaveAttribute("inert");
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(last).toHaveFocus();
+    await user.keyboard("{Tab}");
+    expect(first).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Workspace navigation" })).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+  });
+
+  it("refreshes mounted History after a run finishes without discarding its tab", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
+    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    let finishRun: ((payload: { run_id: string; status: string }) => void) | undefined;
+    vi.mocked(subscribeToRunFinished).mockImplementation(async (callback) => {
+      finishRun = callback;
+      return () => {};
+    });
+    render(<App />);
+    await waitFor(() => expect(finishRun).toBeTypeOf("function"));
+
+    await user.click(screen.getByRole("button", { name: "Run history" }));
+    expect(await screen.findByText("No historical runs found in database.")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Overview" }));
+    vi.mocked(getRunHistory).mockResolvedValue([{
+      id: "run-new", engine: "locust", project: "Configured Project", config: JSON.stringify(configuredProject.suites[0].config),
+      started_at: "2026-09-27T00:00:00.000Z", finished_at: "2026-09-27T00:00:30.000Z", status: "finished",
+    }]);
+    act(() => finishRun?.({ run_id: "run-new", status: "finished" }));
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    expect(await screen.findByText(/run-new/)).toBeVisible();
+    expect(screen.getAllByRole("tab", { name: "History" })).toHaveLength(1);
   });
 });

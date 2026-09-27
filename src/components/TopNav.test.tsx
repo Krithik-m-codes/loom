@@ -103,4 +103,65 @@ describe("TopNav", () => {
     await user.click(screen.getByRole("button", { name: "Toggle workspace navigation" }));
     expect(onToggleNavigation).toHaveBeenCalledTimes(1);
   });
+
+  it("returns keyboard focus to the project picker after Escape and project selection", async () => {
+    const user = userEvent.setup();
+    const onSelectProject = vi.fn();
+    const inventory = { ...project, id: "inventory", name: "Inventory" };
+    render(<TopNav {...createProps({ projects: [project, inventory], onSelectProject })} />);
+
+    const picker = screen.getByRole("button", { name: "Billing" });
+    picker.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("menuitemradio", { name: /Billing/ })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menuitemradio", { name: /Billing/ })).not.toBeInTheDocument();
+    expect(picker).toHaveFocus();
+
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitemradio", { name: /Inventory/ })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onSelectProject).toHaveBeenCalledWith("inventory");
+    expect(picker).toHaveFocus();
+  });
+
+  it("restores focus from the new-tab menu and focuses the opened tab", async () => {
+    const user = userEvent.setup();
+    const onSelectTab = vi.fn();
+    const { rerender } = render(<TopNav {...createProps({ onSelectTab, openTabs: ["dashboard"] })} />);
+    const add = screen.getByRole("button", { name: "Open workspace tab" });
+    add.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("menuitem", { name: "Visual flow" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(add).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("menuitem", { name: "Script editor" }));
+    expect(onSelectTab).toHaveBeenCalledWith("editor");
+    rerender(<TopNav {...createProps({ activeTab: "editor", openTabs: ["dashboard", "editor"], onSelectTab })} />);
+    expect(screen.getByRole("tab", { name: "Script editor" })).toHaveFocus();
+  });
+
+  it("shows the selected engine's availability and its installation reason", () => {
+    const unavailable: EngineInfo = {
+      ...engine, availability: { NotInstalled: { install_hint: "Install Locust with the Runtime Manager" } },
+    };
+    render(<TopNav {...createProps({ engines: [unavailable] })} />);
+
+    expect(screen.getByRole("status", { name: "Engine availability" }))
+      .toHaveTextContent("Install Locust with the Runtime Manager");
+  });
+
+  it("keeps the new-tab menu within a narrow viewport near its right edge", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 320 });
+    render(<TopNav {...createProps()} />);
+    const add = screen.getByRole("button", { name: "Open workspace tab" });
+    vi.spyOn(add, "getBoundingClientRect").mockReturnValue({
+      left: 296, right: 328, top: 10, bottom: 42, width: 32, height: 32, x: 296, y: 10, toJSON: () => ({}),
+    });
+    await user.click(add);
+    expect(screen.getByRole("menu")).toHaveStyle({ left: "120px", top: "48px", width: "192px" });
+  });
 });

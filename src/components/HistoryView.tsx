@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { History, Play, RefreshCw } from "lucide-react";
 import { getRunHistory } from "../lib/ipc";
 import type { RunRecord } from "../types";
@@ -9,6 +9,7 @@ import { StatusBadge, type LoomStatus } from "./ui/StatusBadge";
 
 interface HistoryViewProps {
   onRerun: (engine: string, config: string) => void;
+  refreshRevision?: number;
 }
 
 const toStatusBadge = (status: RunRecord["status"]): LoomStatus => {
@@ -18,23 +19,29 @@ const toStatusBadge = (status: RunRecord["status"]): LoomStatus => {
   return "failed";
 };
 
-export const HistoryView: React.FC<HistoryViewProps> = ({ onRerun }) => {
+export const HistoryView: React.FC<HistoryViewProps> = ({ onRerun, refreshRevision = 0 }) => {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const requestSequence = useRef(0);
 
   const loadHistory = async () => {
+    const request = ++requestSequence.current;
     setLoading(true);
     try {
-      setRuns(await getRunHistory());
+      const history = await getRunHistory();
+      if (request === requestSequence.current) setRuns(history);
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (request === requestSequence.current) setLoading(false);
     }
   };
 
-  useEffect(() => { loadHistory(); }, []);
+  useEffect(() => {
+    void loadHistory();
+    return () => { requestSequence.current += 1; };
+  }, [refreshRevision]);
 
   const filteredRuns = runs.filter((run) =>
     run.engine.toLowerCase().includes(search.toLowerCase()) ||

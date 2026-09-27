@@ -1,6 +1,6 @@
 [package]
 name = "engine-k6"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "k6 engine adapter for Loom — Plugin tier (AGPL-3.0), subprocess-only, JSON output streaming"
 
