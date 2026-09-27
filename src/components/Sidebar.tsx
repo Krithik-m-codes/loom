@@ -96,7 +96,7 @@ export const Sidebar = ({
           >
             <span className="loom-project-switcher__name">
               <Layers aria-hidden="true" size={16} />
-              <span className="loom-truncate">{activeProject?.name ?? "Default Project"}</span>
+              <span className="loom-truncate">{activeProject?.name ?? "No project selected"}</span>
             </span>
             <ChevronDown aria-hidden="true" size={15} />
           </button>

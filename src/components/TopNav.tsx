@@ -15,6 +15,7 @@ interface TopNavProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
   isRunning: boolean;
+  canRun?: boolean;
   onRunTest: () => void;
   onStopTest: () => void;
   selectedEngineName: string;
@@ -27,6 +28,7 @@ export const TopNav = ({
   activeTab,
   onSelectTab,
   isRunning,
+  canRun = true,
   onRunTest,
   onStopTest,
   selectedEngineName,
@@ -99,6 +101,7 @@ export const TopNav = ({
         ) : (
           <LoomButton
             onClick={onRunTest}
+            disabled={!canRun}
             className="loom-topbar__run"
           >
             <Play aria-hidden="true" size={14} fill="currentColor" />

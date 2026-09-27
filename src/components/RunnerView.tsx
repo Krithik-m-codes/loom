@@ -35,6 +35,7 @@ interface RunnerViewProps {
   config: TestConfig;
   onChangeConfig: (config: TestConfig) => void;
   isRunning: boolean;
+  canRun?: boolean;
   onRunTest: () => void;
   onStopTest: () => void;
   metrics: NormalizedMetric[];
@@ -43,7 +44,7 @@ interface RunnerViewProps {
 }
 
 export const RunnerView: React.FC<RunnerViewProps> = ({
-  engines, selectedEngineId, onSelectEngine, config, onChangeConfig, isRunning, onRunTest, onStopTest, metrics, logs, onClearLogs,
+  engines, selectedEngineId, onSelectEngine, config, onChangeConfig, isRunning, canRun = true, onRunTest, onStopTest, metrics, logs, onClearLogs,
 }) => {
   const [configSubTab, setConfigSubTab] = useState<"profile" | "headers" | "script">("profile");
   const [activeTab, setActiveTab] = useState<"charts" | "stats" | "failures" | "logs" | "export">("charts");
@@ -130,7 +131,7 @@ export const RunnerView: React.FC<RunnerViewProps> = ({
         <div className="loom-runner__run-state">
           <StatusBadge status={isRunning ? "running" : isSelectedReady ? "ready" : "stopped"} label={isRunning ? `Running ${formatTimer(elapsedSeconds)}` : isSelectedReady ? "Ready to run" : "Engine unavailable"} />
           {isRunning && <label className="loom-runner__live-users"><Users aria-hidden="true" size={16} /><span>VUs</span><input type="range" min="1" max="500" value={dynamicUsers} onChange={(event) => setDynamicUsers(parseInt(event.target.value) || 1)} /><strong>{dynamicUsers}</strong></label>}
-          {isRunning ? <LoomButton variant="danger" onClick={onStopTest}><Square aria-hidden="true" size={15} fill="currentColor" /> Stop Test ({formatTimer(elapsedSeconds)})</LoomButton> : <LoomButton onClick={onRunTest} disabled={!isSelectedReady}><Play aria-hidden="true" size={15} fill="currentColor" /> Run Test</LoomButton>}
+          {isRunning ? <LoomButton variant="danger" onClick={onStopTest}><Square aria-hidden="true" size={15} fill="currentColor" /> Stop Test ({formatTimer(elapsedSeconds)})</LoomButton> : <LoomButton onClick={onRunTest} disabled={!canRun || !isSelectedReady}><Play aria-hidden="true" size={15} fill="currentColor" /> Run Test</LoomButton>}
         </div>
       </header>
 

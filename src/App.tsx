@@ -21,85 +21,10 @@ import {
   subscribeToRunFinished,
 } from "./lib/ipc";
 import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig } from "./types";
-
-const DEFAULT_PROJECTS: Project[] = [
-  {
-    id: "proj-ecommerce",
-    name: "E-Commerce Benchmark",
-    description: "Multi-endpoint store journey load & stress test",
-    targetHost: "http://localhost:8080",
-    defaultEngine: "locust",
-    createdAt: new Date().toISOString(),
-    suites: [
-      {
-        id: "suite-locust-main",
-        name: "Full User Journey",
-        engine: "locust",
-        scriptPath: "examples/locust/basic_test.py",
-        config: {
-          project_name: "E-Commerce Benchmark",
-          engine: "locust",
-          script_path: "examples/locust/basic_test.py",
-          load_profile: { users: 20, spawn_rate: 5, duration: "60s" },
-          target: { host: "http://localhost:8080" },
-        },
-      },
-      {
-        id: "suite-goose-burst",
-        name: "Checkout Peak Concurrency",
-        engine: "goose",
-        scriptPath: "examples/goose/loadtest.rs",
-        config: {
-          project_name: "E-Commerce Benchmark",
-          engine: "goose",
-          script_path: "examples/goose/loadtest.rs",
-          load_profile: { users: 50, spawn_rate: 10, duration: "30s" },
-          target: { host: "http://localhost:8080" },
-        },
-      },
-      {
-        id: "suite-k6-stress",
-        name: "Cart API Stress",
-        engine: "k6",
-        scriptPath: "examples/k6/basic_test.js",
-        config: {
-          project_name: "E-Commerce Benchmark",
-          engine: "k6",
-          script_path: "examples/k6/basic_test.js",
-          load_profile: { users: 30, spawn_rate: 5, duration: "45s" },
-          target: { host: "http://localhost:8080" },
-        },
-      },
-    ],
-  },
-  {
-    id: "proj-gateway",
-    name: "API Gateway & Auth Stress",
-    description: "High-frequency token authentication test suite",
-    targetHost: "https://httpbin.org",
-    defaultEngine: "goose",
-    createdAt: new Date().toISOString(),
-    suites: [
-      {
-        id: "suite-auth-burst",
-        name: "High-Throughput Native Goose",
-        engine: "goose",
-        scriptPath: "examples/goose/loadtest.rs",
-        config: {
-          project_name: "API Gateway & Auth Stress",
-          engine: "goose",
-          script_path: "examples/goose/loadtest.rs",
-          load_profile: { users: 100, spawn_rate: 20, duration: "60s" },
-          target: { host: "https://httpbin.org" },
-        },
-      },
-    ],
-  },
-];
+import { loadProjectState, projectConfigForSelection } from "./lib/projectState";
 
 export default function App() {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
-  const [selectedEngineId, setSelectedEngineId] = useState<string>("locust");
   // Default to Dashboard directly as requested
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -111,20 +36,24 @@ export default function App() {
   const [flowExportError, setFlowExportError] = useState<string>("");
 
   // Projects state
-  const [projects, setProjects] = useState<Project[]>(() => {
+  const [initialProjectState] = useState(() => {
     try {
-      const saved = localStorage.getItem("loom_projects");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_PROJECTS;
+      return loadProjectState(localStorage.getItem("loom_projects"), localStorage.getItem("loom_active_project_id"));
+    } catch {
+      return loadProjectState(null, null);
+    }
   });
-  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+  const [projects, setProjects] = useState<Project[]>(initialProjectState.projects);
+  const [persistedProjects, setPersistedProjects] = useState<unknown[]>(initialProjectState.persistedProjects);
+  const [activeProjectId, setActiveProjectId] = useState<string>(initialProjectState.activeProjectId);
+
+  useEffect(() => {
+    if (!initialProjectState.shouldPersist) return;
     try {
-      const saved = localStorage.getItem("loom_active_project_id");
-      if (saved) return saved;
+      localStorage.setItem("loom_projects", JSON.stringify(initialProjectState.persistedProjects));
+      localStorage.setItem("loom_active_project_id", initialProjectState.activeProjectId);
     } catch {}
-    return DEFAULT_PROJECTS[0]?.id || "proj-ecommerce";
-  });
+  }, [initialProjectState]);
 
   // Professional Onboarding Wizard state
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
@@ -136,26 +65,8 @@ export default function App() {
   });
 
   // Default test configuration
-  const [config, setConfig] = useState<TestConfig>(() => {
-    const activeProj =
-      projects.find((p) => p.id === activeProjectId) || projects[0];
-    const firstSuite = activeProj?.suites[0];
-    if (firstSuite) return firstSuite.config;
-
-    return {
-      project_name: "Loom Demo Project",
-      engine: "locust",
-      script_path: "examples/locust/basic_test.py",
-      load_profile: {
-        users: 10,
-        spawn_rate: 2,
-        duration: "30s",
-      },
-      target: {
-        host: "http://localhost:8080",
-      },
-    };
-  });
+  const [config, setConfig] = useState<TestConfig>(() => projectConfigForSelection(projects, activeProjectId));
+  const [selectedEngineId, setSelectedEngineId] = useState<string>(() => config.engine);
 
   // Load engines on mount
   useEffect(() => {
@@ -166,7 +77,7 @@ export default function App() {
     try {
       const list = await listEngines();
       setEngines(list);
-      if (list.length > 0 && !list.find((e) => e.id === selectedEngineId)) {
+      if (list.length > 0 && !activeProjectId && !list.find((e) => e.id === selectedEngineId)) {
         setSelectedEngineId(list[0].id);
       }
     } catch (err) {
@@ -224,49 +135,38 @@ export default function App() {
   }, []);
 
   const handleSelectProject = (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (!proj) return;
     setActiveProjectId(projectId);
     try {
       localStorage.setItem("loom_active_project_id", projectId);
     } catch {}
-    const proj = projects.find((p) => p.id === projectId);
-    if (proj && proj.suites.length > 0) {
-      const suite = proj.suites[0];
-      setSelectedEngineId(suite.engine);
-      setConfig(suite.config);
-    }
+    setSelectedEngineId(proj.suites[0]?.engine ?? proj.defaultEngine);
+    setConfig(projectConfigForSelection(projects, projectId));
   };
 
   const handleCreateProject = (newProj: Project) => {
     const updated = [newProj, ...projects];
+    const updatedStored = [newProj, ...persistedProjects];
     setProjects(updated);
+    setPersistedProjects(updatedStored);
     setActiveProjectId(newProj.id);
     try {
-      localStorage.setItem("loom_projects", JSON.stringify(updated));
+      localStorage.setItem("loom_projects", JSON.stringify(updatedStored));
       localStorage.setItem("loom_active_project_id", newProj.id);
     } catch {}
-    if (newProj.suites.length > 0) {
-      const suite = newProj.suites[0];
-      setSelectedEngineId(suite.engine);
-      setConfig(suite.config);
-    }
+    setSelectedEngineId(newProj.suites[0]?.engine ?? newProj.defaultEngine);
+    setConfig(projectConfigForSelection(updated, newProj.id));
     setIsNewProjectOpen(false);
   };
 
   const handleSelectEngine = (engineId: string) => {
     setSelectedEngineId(engineId);
-    let script = config.script_path;
-    if (engineId === "locust") {
-      script = "examples/locust/basic_test.py";
-    } else if (engineId === "k6") {
-      script = "examples/k6/basic_test.js";
-    } else if (engineId === "goose") {
-      script = "examples/goose/loadtest.rs";
-    }
-
+    const suite = projects.find((project) => project.id === activeProjectId)?.suites.find((entry) => entry.engine === engineId);
     setConfig((prev) => ({
       ...prev,
       engine: engineId,
-      script_path: script,
+      script_path: suite?.scriptPath ?? "",
     }));
   };
 
@@ -279,8 +179,14 @@ export default function App() {
     }));
   };
 
+  const activeProject = projects.find((project) => project.id === activeProjectId);
+  const canRun = Boolean(
+    activeProject && config.script_path.trim() && config.target.host.trim() &&
+    engines.some((engine) => engine.id === selectedEngineId && "Ready" in engine.availability),
+  );
+
   const handleRunTest = async () => {
-    if (isRunning) return;
+    if (isRunning || !canRun) return;
 
     // Reset telemetry & navigate to Locust/Goose-grade runner dashboard
     setActiveTab("runner");
@@ -398,6 +304,7 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={setActiveTab}
           isRunning={isRunning}
+          canRun={canRun}
           onRunTest={handleRunTest}
           onStopTest={handleStopTest}
           selectedEngineName={selectedEngineName}
@@ -439,6 +346,7 @@ export default function App() {
               config={config}
               onChangeConfig={setConfig}
               isRunning={isRunning}
+              canRun={canRun}
               onRunTest={handleRunTest}
               onStopTest={handleStopTest}
               metrics={metrics}
