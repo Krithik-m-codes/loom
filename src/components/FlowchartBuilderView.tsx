@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   CheckCircle,
@@ -32,6 +32,9 @@ export interface FlowNode {
 interface FlowchartBuilderViewProps {
   onExportToRunner: (scriptContent: string, engine: string) => void;
   targetHost: string;
+  suiteId?: string;
+  initialNodes?: FlowNode[];
+  onSaveVisualFlow?: (nodes: FlowNode[]) => void;
 }
 
 const initialNodes: FlowNode[] = [
@@ -66,12 +69,17 @@ const nodeDetails: Record<Exclude<FlowNode["type"], "start">, { label: string; d
   loop: { label: "Loop Block", detail: "Repeat following steps", icon: Repeat },
 };
 
-export const FlowchartBuilderView = ({ onExportToRunner, targetHost }: FlowchartBuilderViewProps) => {
-  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes);
+export const FlowchartBuilderView = ({ onExportToRunner, targetHost, suiteId, initialNodes: initialNodesProp, onSaveVisualFlow }: FlowchartBuilderViewProps) => {
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodesProp ?? initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState("node-2");
   const [previewLanguage, setPreviewLanguage] = useState<"locust" | "k6">("locust");
   const [copiedScript, setCopiedScript] = useState(false);
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
+
+  useEffect(() => {
+    setNodes(initialNodesProp ?? initialNodes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suiteId]);
 
   const addNode = (type: Exclude<FlowNode["type"], "start">) => {
     const newY = nodes.length > 0 ? nodes[nodes.length - 1].y + 130 : 60;
@@ -263,6 +271,9 @@ ${stepsCode}
       <aside className="loom-flow-inspector" aria-label="Step inspector">
         <header className="loom-flow-inspector__header">
           <span><Layers aria-hidden="true" /> Step inspector</span>
+          <LoomButton className="loom-button--compact" onClick={() => onSaveVisualFlow?.(nodes)}>
+            Save flow
+          </LoomButton>
           <LoomButton className="loom-button--compact" onClick={() => onExportToRunner(activeGeneratedScript, previewLanguage)}>
             <Send aria-hidden="true" /> Send to Runner
           </LoomButton>

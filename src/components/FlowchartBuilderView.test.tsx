@@ -66,4 +66,12 @@ describe("FlowchartBuilderView", () => {
     expect(locustScript).toContain('json=json.loads("{\\\"enabled\\\": true}")');
     expect(locustScript).toContain('raise AssertionError("Verify \\"quote\\": no preceding HTTP response")');
   });
+
+  it("hydrates from initial nodes and saves the flow", () => {
+    const onSave = vi.fn();
+    render(<FlowchartBuilderView targetHost="http://x" onExportToRunner={() => {}} initialNodes={[{ id: "n1", type: "http", title: "Saved Step", method: "GET", path: "/saved", x: 0, y: 0 }]} onSaveVisualFlow={onSave} />);
+    expect(screen.getByText("Saved Step")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /save flow/i }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
 });
