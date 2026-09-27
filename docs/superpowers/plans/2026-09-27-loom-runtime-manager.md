@@ -58,16 +58,16 @@
 - Create: `crates/runtime-manager/src/platform.rs`
 - Create: `crates/runtime-manager/tests/manifest.rs`
 - Modify: `Cargo.toml`
-- Modify: `src-tauri/Cargo.toml`
 
 **Interfaces:**
 - Produces `RuntimeId::{Locust, Goose, K6}` and `PlatformKey { os, arch }` with explicit supported/unsupported results.
-- Produces `RuntimeManifest::artifact(runtime, platform) -> Result<&Artifact, ManifestError>`; `Artifact` contains version, URL, SHA-256, archive format, executable path, license, and upstream attribution.
+- Produces `ArtifactId::{UvBootstrap, RustupBootstrap, K6}` and `RuntimeManifest::artifact(artifact, platform) -> Result<&Artifact, ManifestError>`; `Artifact` contains version, URL, SHA-256, archive format, executable path, license, and upstream attribution.
+- Produces runtime component pins: Locust CPython build and Locust version; Goose Rust toolchain version; k6 version is inherited from its platform artifact.
 - Produces `InstallState::{Missing, Installing { stage }, Ready { version, path }, Failed { stage, message }}` serializable to Tauri.
 
 - [ ] **Step 1: Write failing manifest and platform tests**
 
-Add cases for Windows x64, macOS arm64, Linux x64, Linux arm64, and unsupported platform combinations. Assert every supported artifact has HTTPS, non-empty version, 64-hex SHA-256, license metadata, and safe relative executable path. Assert unsupported targets return `ManifestError::UnsupportedPlatform`.
+Add cases for Windows x64, macOS x64/arm64, Linux x64/arm64, and unsupported combinations. Assert every supported bootstrap/k6 artifact has HTTPS, non-empty version, a 64-hex SHA-256, license metadata, and safe relative executable path. Assert Locust and Goose pins identify exact versions/builds and unsupported targets return `ManifestError::UnsupportedPlatform`.
 
 - [ ] **Step 2: Run the tests and confirm the missing runtime-manager crate is the failure**
 
@@ -77,7 +77,7 @@ Expected: FAIL because the new crate and manifest API do not yet exist.
 
 - [ ] **Step 3: Add the crate and typed manifest model**
 
-Register `crates/runtime-manager` in the workspace, add the path dependency to `src-tauri`, define the types above, and check in a versioned manifest. Pin artifacts for Windows x64, macOS x64/arm64, Linux x64/arm64. Use Astral's release checksum assets for `uv`, the upstream k6 checksum file for k6, and rustup's signed channel metadata for Rust toolchains. Reject directly downloaded manifest entries without a verifiable checksum; reject bootstrap-managed components without a documented signature/checksum path and exact version probe. Pin Locust and CPython versions in the manifest.
+Register `crates/runtime-manager` in the workspace and define the types above. Pin one currently maintained stable version for uv, rustup, k6, Locust, CPython, and the Rust toolchain when authoring the checked-in manifest. Use Astral's per-artifact SHA-256 assets for uv and the upstream release checksum file for k6; verify rustup bootstrap bytes by a reviewed pinned SHA-256, then rely on rustup's signed channel metadata for toolchain downloads. Reject a target without an upstream artifact and a verifiable checksum/signature path. Keep the Tauri dependency registration for Task 4 so Task 1 does not touch the user's in-progress version bump in `src-tauri/Cargo.toml`.
 
 - [ ] **Step 4: Run manifest tests and Rust type checks**
 
@@ -92,7 +92,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit the runtime contract**
 
 ```powershell
-git add -- Cargo.toml src-tauri/Cargo.toml crates/runtime-manager
+git add -- Cargo.toml crates/runtime-manager
 git commit -m "feat: define managed runtime manifest"
 ```
 
