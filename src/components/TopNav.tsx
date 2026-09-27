@@ -50,7 +50,7 @@ export const TopNav = ({
 
   return (
     <header className="loom-topbar">
-      <nav className="loom-topbar__tabs" aria-label="Workspace views" role="tablist">
+      <nav className="loom-topbar__tabs" aria-label="Workspace views">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -60,8 +60,7 @@ export const TopNav = ({
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
               className={`loom-tab ${isActive ? "loom-tab--active" : ""}`}
-              role="tab"
-              aria-selected={isActive}
+              aria-current={isActive ? "page" : undefined}
             >
               <Icon aria-hidden="true" size={16} />
               <span className="loom-truncate">{tab.label}</span>

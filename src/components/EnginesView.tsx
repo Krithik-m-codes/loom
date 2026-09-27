@@ -41,7 +41,7 @@ export const EnginesView: React.FC<EnginesViewProps> = ({ engines }) => {
               const ready = "Ready" in engine.availability;
               const version = "Ready" in engine.availability ? engine.availability.Ready.version : null;
               const installHint = "NotInstalled" in engine.availability ? engine.availability.NotInstalled.install_hint : null;
-              const command = engine.id === "k6" ? "winget install k6.k6" : engine.id === "locust" ? "pip install locust" : "cargo install goose";
+              const command = engine.id === "k6" ? "winget install k6.k6" : engine.id === "locust" ? "pip install locust" : "rustup update";
 
               return (
                 <Panel key={engine.id} className="loom-engine-card">

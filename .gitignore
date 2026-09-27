@@ -48,3 +48,5 @@ desktop.ini
 *.log
 .tempmediaStorage/
 scratch/
+
+/target-visual-check

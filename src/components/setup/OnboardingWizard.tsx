@@ -89,8 +89,8 @@ export const OnboardingWizard = ({ engines, onComplete }: OnboardingWizardProps)
                   const ready = "Ready" in engine.availability;
                   const version = "Ready" in engine.availability ? engine.availability.Ready.version : null;
                   const installHint = "NotInstalled" in engine.availability ? engine.availability.NotInstalled.install_hint : null;
-                  const command = engine.id === "k6" ? "winget install k6.k6" : engine.id === "locust" ? "pip install locust" : "cargo install goose";
-                  const displayCommand = engine.id === "k6" ? "winget install k6.k6 (or brew install k6)" : engine.id === "locust" ? "pip install locust (requires Python 3.10+)" : "cargo install goose (requires Rust toolchain)";
+                  const command = engine.id === "k6" ? "winget install k6.k6" : engine.id === "locust" ? "pip install locust" : "rustup update";
+                  const displayCommand = engine.id === "k6" ? "winget install k6.k6 (or brew install k6)" : engine.id === "locust" ? "pip install locust (requires Python 3.10+)" : "Install Rust from https://rustup.rs/ (Cargo compiles Goose scenarios)";
 
                   return (
                     <article className="loom-onboarding__engine" key={engine.id}>

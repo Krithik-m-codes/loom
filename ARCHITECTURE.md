@@ -31,7 +31,7 @@ graph TD
 
     subgraph Subprocesses["External Subprocesses (Process Boundary)"]
         LocustProc["locust.exe (Python, CSV Stats)"]
-        GooseProc["goose.exe (Rust, Stdout Stream)"]
+        GooseProc["Cargo-built Goose scenario (Rust, Stdout Stream)"]
         K6Proc["k6.exe (Go, JSON Metrics)"]
     end
 

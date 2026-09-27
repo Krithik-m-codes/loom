@@ -33,7 +33,7 @@
     --loom-green-dark: #16a34a;
     --loom-text: #e6ffe6;
     --loom-text-secondary: #9ca89c;
-    --loom-text-muted: #667066;
+    --loom-text-muted: #819081;
     --loom-warning: #f59e0b;
     --loom-error: #ef4444;
     --loom-info: #3b82f6;
@@ -48,6 +48,9 @@
     --loom-radius-small: 6px;
     --loom-radius-control: 8px;
     --loom-radius-panel: 12px;
+    --loom-radius-sm: var(--loom-radius-small);
+    --loom-radius-md: var(--loom-radius-control);
+    --loom-radius-lg: var(--loom-radius-panel);
     --loom-shadow-floating: 0 16px 36px rgb(0 0 0 / 0.28);
     --loom-motion-fast: 150ms;
     --loom-motion-base: 200ms;
@@ -96,6 +99,7 @@
     --radius-lg: var(--loom-radius-control);
     --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --loom-font-mono: var(--font-mono);
     --duration-fast: var(--loom-motion-fast);
     --duration-base: var(--loom-motion-base);
     --duration-slow: 240ms;
@@ -1883,7 +1887,6 @@
   height: 100%;
   border-radius: inherit;
   background: var(--loom-primary);
-  transition: width var(--loom-motion-base) var(--loom-ease-out);
 }
 
 .loom-resource-meter__fill--info {
@@ -2918,6 +2921,16 @@
 .loom-code-preview__copy { display: inline-flex; align-items: center; gap: 0.25rem; }
 .loom-code-preview__copy svg { width: 0.75rem; height: 0.75rem; }
 .loom-code-preview pre { flex: 1; min-height: 0; margin: 0; overflow: auto; color: var(--loom-text); font-family: var(--loom-font-mono); font-size: 0.75rem; line-height: 1.65; padding: var(--loom-space-4); white-space: pre; }
+
+.loom-action-error {
+  margin: var(--loom-space-3) var(--loom-space-4) 0;
+  border: 1px solid color-mix(in srgb, var(--loom-error) 45%, var(--loom-border));
+  border-radius: var(--loom-radius-control);
+  background: color-mix(in srgb, var(--loom-error) 9%, var(--loom-surface));
+  color: var(--loom-text);
+  font-size: 0.8125rem;
+  padding: var(--loom-space-2) var(--loom-space-3);
+}
 
 @media (max-width: 1100px) {
   .loom-flow-builder { grid-template-columns: 13rem minmax(18rem, 1fr); }

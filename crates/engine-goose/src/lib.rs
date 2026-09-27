@@ -4,16 +4,17 @@
 //!
 //! ## Invocation
 //!
-//! Goose runs as a compiled Rust load test binary or `goose` CLI:
+//! Goose runs as a compiled Rust load-test application launched through Cargo:
 //!
 //! ```text
-//! goose --host <target> --users <N> --hatch-rate <N> --run-time <duration>
+//! cargo run --release -- --host <target> --users <N> --hatch-rate <N> --run-time <duration>
 //! ```
 //!
 //! Goose prints periodic progress to stdout. This adapter parses those lines
 //! into `NormalizedMetric` data points.
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 
 use async_trait::async_trait;
@@ -22,9 +23,6 @@ use engine_core::*;
 use futures::stream::BoxStream;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use uuid::Uuid;
-
-pub mod worker;
-pub use worker::run_worker;
 
 /// Goose engine adapter — Core tier (MIT OR Apache-2.0).
 pub struct GooseEngine;
@@ -165,7 +163,7 @@ impl LoadEngine for GooseEngine {
     }
 
     fn detect(&self) -> EngineAvailability {
-        if let Ok(path) = which::which("goose") {
+        if let Ok(path) = which::which("cargo") {
             let version = std::process::Command::new(&path)
                 .arg("--version")
                 .output()
@@ -174,9 +172,8 @@ impl LoadEngine for GooseEngine {
                 .map(|s| s.trim().to_string());
             EngineAvailability::Ready { version }
         } else {
-            // Native embedded Goose engine is ready out-of-the-box (zero install needed)
-            EngineAvailability::Ready {
-                version: Some("0.17.2 (Embedded Native)".to_string()),
+            EngineAvailability::NotInstalled {
+                install_hint: "Install the Rust toolchain from https://rustup.rs/. Loom compiles each Goose scenario as an external Cargo project.".to_string(),
             }
         }
     }
@@ -208,45 +205,49 @@ impl LoadEngine for GooseEngine {
 
         let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
 
-        let (binary_path, args) = if let Ok(goose_path) = which::which("goose") {
-            let report_file = run_dir.join("report.html");
-            let args = vec![
-                "--host".to_string(),
-                cfg.target.host.clone(),
-                "--users".to_string(),
-                cfg.load_profile.users.to_string(),
-                "--hatch-rate".to_string(),
-                cfg.load_profile.spawn_rate.to_string(),
-                "--run-time".to_string(),
-                format!("{duration_secs}s"),
-                "--report-file".to_string(),
-                report_file.to_string_lossy().to_string(),
-            ];
-            (goose_path, args)
-        } else {
-            // Use Loom self-binary in embedded worker mode
-            let self_exe = std::env::current_exe().map_err(|e| {
-                EngineError::Other(format!("Failed to locate current Loom binary: {e}"))
-            })?;
-            let args = vec![
-                "--loom-worker".to_string(),
-                "goose".to_string(),
-                "--host".to_string(),
-                cfg.target.host.clone(),
-                "--users".to_string(),
-                cfg.load_profile.users.to_string(),
-                "--spawn-rate".to_string(),
-                cfg.load_profile.spawn_rate.to_string(),
-                "--duration".to_string(),
-                format!("{duration_secs}s"),
-            ];
-            (self_exe, args)
-        };
+        let cargo_path = which::which("cargo").map_err(|_| EngineError::NotInstalled {
+            install_hint: "Install the Rust toolchain from https://rustup.rs/ to run Goose scenarios.".to_string(),
+        })?;
+        if !cfg.script_path.is_file() {
+            return Err(EngineError::Validation(format!(
+                "Goose scenario does not exist: {}",
+                cfg.script_path.display()
+            )));
+        }
+
+        let project_dir = run_dir.join("goose-project");
+        let source_dir = project_dir.join("src");
+        fs::create_dir_all(&source_dir)?;
+        fs::copy(&cfg.script_path, source_dir.join("main.rs"))?;
+        let manifest_path = project_dir.join("Cargo.toml");
+        fs::write(
+            &manifest_path,
+            "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n",
+        )?;
+
+        let report_file = run_dir.join("report.html");
+        let args = vec![
+            "run".to_string(),
+            "--release".to_string(),
+            "--manifest-path".to_string(),
+            manifest_path.to_string_lossy().to_string(),
+            "--".to_string(),
+            "--host".to_string(),
+            cfg.target.host.clone(),
+            "--users".to_string(),
+            cfg.load_profile.users.to_string(),
+            "--hatch-rate".to_string(),
+            cfg.load_profile.spawn_rate.to_string(),
+            "--run-time".to_string(),
+            format!("{duration_secs}s"),
+            "--report-file".to_string(),
+            report_file.to_string_lossy().to_string(),
+        ];
 
         Ok(PreparedJob {
             run_id: Uuid::new_v4(),
             work_dir: run_dir.to_path_buf(),
-            binary_path,
+            binary_path: cargo_path,
             args,
             env: HashMap::new(),
         })
@@ -371,5 +372,39 @@ mod tests {
         let mut invalid_cfg = valid_cfg.clone();
         invalid_cfg.target.host = "".to_string();
         assert!(engine.validate_config(&invalid_cfg).is_err());
+    }
+
+    #[test]
+    fn test_prepare_workspace_generates_a_subprocess_goose_project() {
+        let engine = GooseEngine::new();
+        let root = std::env::temp_dir().join(format!("loom-goose-test-{}", Uuid::new_v4()));
+        let script_path = root.join("scenario.rs");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&script_path, "fn main() {}\n").unwrap();
+        let cfg = TestConfig {
+            project_name: "goose_proj".to_string(),
+            engine: "goose".to_string(),
+            script_path,
+            load_profile: LoadProfile {
+                users: 10,
+                spawn_rate: 2,
+                duration: "30s".to_string(),
+            },
+            target: TargetConfig {
+                host: "http://localhost:8080".to_string(),
+                headers: None,
+            },
+        };
+        let run_dir = root.join("run");
+
+        let job = engine.prepare_workspace(&cfg, &run_dir).unwrap();
+
+        assert_eq!(job.binary_path.file_stem().and_then(|name| name.to_str()), Some("cargo"));
+        let manifest_path = run_dir.join("goose-project").join("Cargo.toml").to_string_lossy().to_string();
+        let manifest_index = job.args.iter().position(|arg| arg == "--manifest-path").unwrap();
+        assert_eq!(job.args.get(manifest_index + 1), Some(&manifest_path));
+        assert!(run_dir.join("goose-project/src/main.rs").exists());
+        assert!(run_dir.join("goose-project/Cargo.toml").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

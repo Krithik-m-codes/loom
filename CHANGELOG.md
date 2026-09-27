@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Multi-Engine Orchestrator**: Support for Python Locust, Rust Goose, and JavaScript k6.
-- **Embedded Zero-Install Goose Engine**: Native Tokio asynchronous load generation worker built directly into Loom.
+- **External Goose Scenario Runner**: Rust scenarios run as generated Cargo projects in a subprocess; no Goose engine code is embedded in Loom.
 - **Vendored Locust Engine**: Official `locustio/locust` repository vendored for seamless execution.
 - **Strict License Isolation**: Copyleft engines (k6 - AGPL-3.0) decoupled across process boundaries with zero linkage.
 - **Locust- & Goose-Grade Live Telemetry**:

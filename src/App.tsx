@@ -108,6 +108,7 @@ export default function App() {
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [isCmdkOpen, setIsCmdkOpen] = useState<boolean>(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
+  const [flowExportError, setFlowExportError] = useState<string>("");
 
   // Projects state
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -345,8 +346,11 @@ export default function App() {
       await saveScript(filename, scriptContent);
     } catch (e) {
       console.error("Failed to save generated script:", e);
+      setFlowExportError("Could not save the generated scenario. Resolve the error and try again before opening Runner.");
+      return;
     }
 
+    setFlowExportError("");
     setSelectedEngineId(engine);
     setConfig((prev) => ({
       ...prev,
@@ -369,6 +373,7 @@ export default function App() {
 
   return (
     <div className="loom-app-shell select-none">
+      <a className="loom-skip-link" href="#main-content">Skip to workspace content</a>
       {/* 1. Bruno + Kubus Sidebar */}
       <Sidebar
         engines={engines}
@@ -407,7 +412,8 @@ export default function App() {
         />
 
         {/* Tab Views */}
-        <div className="flex-1 flex overflow-hidden">
+        {flowExportError && <p className="loom-action-error" role="alert">{flowExportError}</p>}
+        <div id="main-content" className="flex-1 flex overflow-hidden" tabIndex={-1}>
           {activeTab === "dashboard" && (
             <DashboardView
               engines={engines}
