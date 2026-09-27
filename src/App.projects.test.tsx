@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "./types";
-import { getRunHistory, getSuite, listEngines, listProjects, listSuites, subscribeToRunFinished } from "./lib/ipc";
+import { createProject, getRunHistory, getSuite, listEngines, listProjects, listSuites, subscribeToRunFinished } from "./lib/ipc";
 
 const { startRun } = vi.hoisted(() => ({ startRun: vi.fn() }));
 vi.mock("./lib/ipc", () => ({
@@ -12,6 +12,7 @@ vi.mock("./lib/ipc", () => ({
   ]),
   listProjects: vi.fn().mockResolvedValue([]),
   listSuites: vi.fn().mockResolvedValue([]),
+  createProject: vi.fn(),
   startRun,
   stopRun: vi.fn(),
   saveScript: vi.fn(),
@@ -53,6 +54,7 @@ beforeEach(() => {
   vi.mocked(listProjects).mockResolvedValue([]);
   vi.mocked(listSuites).mockReset();
   vi.mocked(listSuites).mockResolvedValue([]);
+  vi.mocked(createProject).mockReset();
   vi.mocked(getSuite).mockReset();
   vi.mocked(getRunHistory).mockReset();
   vi.mocked(getRunHistory).mockResolvedValue([]);
@@ -126,6 +128,11 @@ describe("project startup and run gating", () => {
       ],
     };
     localStorage.setItem("loom_onboarding_completed", "true");
+    // Selecting a suite opens the editor tab, which loads suite content via getSuite.
+    vi.mocked(getSuite).mockImplementation(async (id: string) => {
+      const suite = twoSuiteProject.suites.find((entry) => entry.id === id) ?? twoSuiteProject.suites[0];
+      return { ...suite, projectId: twoSuiteProject.id, scriptContent: "// suite script", visualNodes: undefined };
+    });
     seedProjects([twoSuiteProject]);
     startRun.mockResolvedValue("run-k6");
     render(<App />);
@@ -183,6 +190,10 @@ describe("project startup and run gating", () => {
   it("creates a project from the modal and selects it in a fresh database", async () => {
     const user = userEvent.setup();
     seedProjects([]);
+    vi.mocked(createProject).mockImplementation(async (name: string, targetHost: string, defaultEngine: string) => ({
+      id: "proj-created", name, description: "", targetHost, defaultEngine,
+      createdAt: "2026-09-27T00:00:00.000Z", suites: [],
+    }));
     render(<App />);
 
     await waitFor(() => expect(vi.mocked(listProjects)).toHaveBeenCalled());
@@ -190,9 +201,11 @@ describe("project startup and run gating", () => {
     await user.type(screen.getByRole("textbox", { name: "Project name" }), "Created workspace");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
 
-    expect(screen.queryByRole("dialog", { name: "Create load testing project" })).not.toBeInTheDocument();
+    expect(createProject).toHaveBeenCalledWith("Created workspace", "http://localhost:8080", "locust");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Create load testing project" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /Created workspace/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled();
+    // A fresh project starts with no suites, so there is nothing runnable yet.
+    expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled();
   });
 
   it("does not run a saved k6 script through a different installed engine", async () => {
@@ -226,17 +239,15 @@ describe("project startup and run gating", () => {
     expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(screen.getByRole("tab", { name: "Overview" }));
-    await user.click(screen.getByRole("tab", { name: "Script editor" }));
+    await user.click(screen.getByRole("tab", { name: "Editor" }));
     expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Script editor" }));
-    expect(screen.getAllByRole("tab", { name: "Script editor" })).toHaveLength(1);
+    expect(screen.getAllByRole("tab", { name: "Editor" })).toHaveLength(1);
 
-    // Selecting the suite also opened the runner tab, so close it first to
-    // restore the original single-editor-tab close scenario.
-    await user.click(screen.getByRole("button", { name: "Close configured.py tab" }));
-    expect(screen.queryByRole("tab", { name: "configured.py" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Close Script editor tab" }));
-    expect(screen.queryByRole("tab", { name: "Script editor" })).not.toBeInTheDocument();
+    // Selecting the suite opened the editor tab directly, so close it to
+    // restore the single-tab close scenario.
+    await user.click(screen.getByRole("button", { name: "Close Editor tab" }));
+    expect(screen.queryByRole("tab", { name: "Editor" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveFocus();
   });

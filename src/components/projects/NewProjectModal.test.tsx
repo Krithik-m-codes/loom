@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { EngineInfo } from "../../types";
+import { createProject } from "../../lib/ipc";
 import { NewProjectModal } from "./NewProjectModal";
+
+vi.mock("../../lib/ipc", () => ({ createProject: vi.fn() }));
 
 const locust: EngineInfo = {
   id: "locust",
@@ -15,14 +18,24 @@ const locust: EngineInfo = {
 };
 
 describe("NewProjectModal", () => {
-  it("submits the existing project shape", async () => {
+  it("submits a new project through the IPC layer starting with no suites", async () => {
     const user = userEvent.setup();
     const onCreateProject = vi.fn();
+    const onClose = vi.fn();
+    vi.mocked(createProject).mockResolvedValue({
+      id: "proj-1",
+      name: "Payments",
+      description: "",
+      targetHost: "http://localhost:8080",
+      defaultEngine: "locust",
+      createdAt: "2026-09-27T00:00:00.000Z",
+      suites: [],
+    });
 
     render(
       <NewProjectModal
         isOpen
-        onClose={vi.fn()}
+        onClose={onClose}
         engines={[locust]}
         onCreateProject={onCreateProject}
       />,
@@ -31,7 +44,11 @@ describe("NewProjectModal", () => {
     await user.type(screen.getByLabelText("Project name"), "Payments");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
 
-    expect(onCreateProject).toHaveBeenCalledWith(expect.objectContaining({ name: "Payments" }));
-    expect(onCreateProject.mock.calls[0][0].suites).toHaveLength(1);
+    expect(createProject).toHaveBeenCalledWith("Payments", "http://localhost:8080", "locust");
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Payments", suites: [] }),
+    ));
+    expect(onCreateProject.mock.calls[0][0].suites).toHaveLength(0);
+    expect(onClose).toHaveBeenCalled();
   });
 });

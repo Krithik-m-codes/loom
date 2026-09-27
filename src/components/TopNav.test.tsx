@@ -68,7 +68,7 @@ describe("TopNav", () => {
     await user.click(screen.getByRole("button", { name: "Close checkout.py tab" }));
     expect(onCloseTab).toHaveBeenCalledWith("runner");
     await user.click(screen.getByRole("button", { name: "Open workspace tab" }));
-    await user.click(screen.getByRole("menuitem", { name: "Script editor" }));
+    await user.click(screen.getByRole("menuitem", { name: "Editor" }));
     expect(onSelectTab).toHaveBeenCalledWith("editor");
   });
 
@@ -137,10 +137,10 @@ describe("TopNav", () => {
     await user.keyboard("{Escape}");
     expect(add).toHaveFocus();
     await user.keyboard("{Enter}");
-    await user.click(screen.getByRole("menuitem", { name: "Script editor" }));
+    await user.click(screen.getByRole("menuitem", { name: "Editor" }));
     expect(onSelectTab).toHaveBeenCalledWith("editor");
     rerender(<TopNav {...createProps({ activeTab: "editor", openTabs: ["dashboard", "editor"], onSelectTab })} />);
-    expect(screen.getByRole("tab", { name: "Script editor" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Editor" })).toHaveFocus();
   });
 
   it("shows the selected engine's availability and its installation reason", () => {
