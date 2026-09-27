@@ -27,6 +27,7 @@ interface SidebarProps {
   projects: Project[];
   activeProjectId: string;
   onOpenNewProject: () => void;
+  onOpenNewSuite?: () => void;
 }
 
 export const Sidebar = ({
@@ -41,6 +42,7 @@ export const Sidebar = ({
   projects,
   activeProjectId,
   onOpenNewProject,
+  onOpenNewSuite,
 }: SidebarProps) => {
   const [samplesExpanded, setSamplesExpanded] = useState(true);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
@@ -91,7 +93,7 @@ export const Sidebar = ({
                     const selected = selectedScript === suite.scriptPath;
                     return (
                       <button key={suite.id} type="button"
-                        onClick={() => { onSelectScript(suite.scriptPath, suite.engine); onSelectTab("runner"); }}
+                        onClick={() => { onSelectScript(suite.scriptPath, suite.engine); onSelectTab("editor"); }}
                         className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}>
                         <span className="loom-sidebar__suite-name"><Zap aria-hidden="true" size={14} />
                           <span className="loom-truncate">{suite.name}</span></span>
@@ -102,6 +104,10 @@ export const Sidebar = ({
                 </div>
               ) : <p className="loom-sidebar__empty">No suites yet. Open Visual flow or Script editor to create one.</p>
             )}
+            <button type="button" onClick={() => onOpenNewSuite?.()} className="loom-sidebar__new-suite" aria-label="New suite">
+              <Plus aria-hidden="true" size={14} />
+              <span>New Suite</span>
+            </button>
           </>
         ) : <p className="loom-sidebar__empty">Create a project to organize scenarios and run history.</p>}
       </section>

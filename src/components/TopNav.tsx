@@ -11,7 +11,7 @@ const destinations = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
   { id: "flowchart", label: "Visual flow", icon: Workflow },
   { id: "runner", label: "Test runner", icon: Zap },
-  { id: "editor", label: "Script editor", icon: FileCode2 },
+  { id: "editor", label: "Editor", icon: FileCode2 },
   { id: "history", label: "History", icon: History },
   { id: "engines", label: "Engines", icon: Activity },
 ] as const;

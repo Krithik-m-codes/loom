@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FolderPlus, Globe, X, Zap } from "lucide-react";
-import type { EngineInfo, Project, TestSuite } from "../../types";
+import type { EngineInfo, Project } from "../../types";
+import { createProject } from "../../lib/ipc";
 import { LoomButton } from "../ui/LoomButton";
 
 interface NewProjectModalProps {
@@ -14,46 +15,33 @@ export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: N
   const [name, setName] = useState("");
   const [targetHost, setTargetHost] = useState("http://localhost:8080");
   const [selectedEngine, setSelectedEngine] = useState("locust");
-  const [users, setUsers] = useState(20);
-  const [spawnRate, setSpawnRate] = useState(5);
-  const [duration, setDuration] = useState("1m");
   const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
 
-    const projectId = `proj-${Date.now()}`;
-    let scriptPath = "examples/locust/basic_test.py";
-    if (selectedEngine === "k6") scriptPath = "examples/k6/basic_test.js";
-    if (selectedEngine === "goose") scriptPath = "examples/goose/loadtest.rs";
-
-    const defaultSuite: TestSuite = {
-      id: `suite-${Date.now()}`,
-      name: "Default Load Scenario",
-      engine: selectedEngine,
-      scriptPath,
-      config: {
-        project_name: name,
-        engine: selectedEngine,
-        script_path: scriptPath,
-        load_profile: { users, spawn_rate: spawnRate, duration },
-        target: { host: targetHost },
-      },
-    };
-
-    onCreateProject({
-      id: projectId,
-      name: name.trim(),
-      description: description.trim() || "Load testing suite",
-      targetHost: targetHost.trim() || "http://localhost:8080",
-      defaultEngine: selectedEngine,
-      createdAt: new Date().toISOString(),
-      suites: [defaultSuite],
-    });
-    onClose();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const created = await createProject(name.trim(), targetHost.trim(), selectedEngine);
+      const now = new Date().toISOString();
+      onCreateProject({
+        ...created,
+        suites: [],
+        createdAt: created.createdAt ?? now,
+        updatedAt: created.updatedAt ?? now,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -64,7 +52,7 @@ export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: N
             <span className="loom-project-modal__icon"><FolderPlus aria-hidden="true" size={20} /></span>
             <div>
               <h2 id="new-project-title">Create load testing project</h2>
-              <p>Set a target, initial concurrency, and a default engine-ready suite.</p>
+              <p>Set a target and a default engine, then create suites from templates.</p>
             </div>
           </div>
           <LoomButton type="button" variant="ghost" className="loom-icon-button" onClick={onClose} aria-label="Close project creation dialog">
@@ -137,27 +125,11 @@ export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: N
             </div>
           </fieldset>
 
-          <fieldset className="loom-project-form__load-profile">
-            <legend>Initial load profile</legend>
-            <div className="loom-project-form__load-grid">
-              <div className="loom-form-field">
-                <label htmlFor="project-users">Initial users</label>
-                <input id="project-users" className="loom-input loom-mono" type="number" min="1" max="5000" value={users} onChange={(event) => setUsers(parseInt(event.target.value) || 10)} />
-              </div>
-              <div className="loom-form-field">
-                <label htmlFor="project-spawn-rate">Spawn rate / sec</label>
-                <input id="project-spawn-rate" className="loom-input loom-mono" type="number" min="1" max="100" value={spawnRate} onChange={(event) => setSpawnRate(parseInt(event.target.value) || 1)} />
-              </div>
-              <div className="loom-form-field">
-                <label htmlFor="project-duration">Duration</label>
-                <input id="project-duration" className="loom-input loom-mono" type="text" value={duration} onChange={(event) => setDuration(event.target.value)} placeholder="e.g. 1m, 5m, 30s" />
-              </div>
-            </div>
-          </fieldset>
+          {error && <p className="loom-action-error" role="alert">{error}</p>}
 
           <footer className="loom-project-form__actions">
             <LoomButton type="button" variant="secondary" onClick={onClose}>Cancel</LoomButton>
-            <LoomButton type="submit" disabled={!name.trim()}>Create Project</LoomButton>
+            <LoomButton type="submit" disabled={!name.trim() || isSubmitting}>Create Project</LoomButton>
           </footer>
         </form>
       </div>

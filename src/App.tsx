@@ -10,6 +10,7 @@ import { EnginesView } from "./components/EnginesView";
 import { CommandPaletteModal } from "./components/CommandPaletteModal";
 import { OnboardingWizard } from "./components/setup/OnboardingWizard";
 import { NewProjectModal } from "./components/projects/NewProjectModal";
+import { NewSuiteModal } from "./components/projects/NewSuiteModal";
 import {
   listEngines,
   listProjects,
@@ -22,7 +23,7 @@ import {
   subscribeToRunStarted,
   subscribeToRunFinished,
 } from "./lib/ipc";
-import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig } from "./types";
+import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig, TestSuite } from "./types";
 import { configForSuite, projectConfigForSelection } from "./lib/projectState";
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [isCmdkOpen, setIsCmdkOpen] = useState<boolean>(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
+  const [isNewSuiteOpen, setIsNewSuiteOpen] = useState<boolean>(false);
   const [flowExportError, setFlowExportError] = useState<string>("");
 
   const openWorkspaceTab = (tab: string) => {
@@ -234,10 +236,24 @@ export default function App() {
     const updated = [newProj, ...projects];
     setProjects(updated);
     setActiveProjectId(newProj.id);
+    setActiveSuiteId(null);
     const nextConfig = projectConfigForSelection(updated, newProj.id);
     setSelectedEngineId(nextConfig.engine);
     setConfig(nextConfig);
     setIsNewProjectOpen(false);
+  };
+
+  const handleCreateSuite = (suite: TestSuite) => {
+    setProjects((prev) =>
+      prev.map((project) =>
+        project.id === activeProjectId ? { ...project, suites: [...project.suites, suite] } : project,
+      ),
+    );
+    setActiveSuiteId(suite.id);
+    setSelectedEngineId(suite.engine);
+    setConfig(configForSuite(suite));
+    openWorkspaceTab("editor");
+    setIsNewSuiteOpen(false);
   };
 
   const handleSelectEngine = (engineId: string) => {
@@ -400,6 +416,7 @@ export default function App() {
           projects={projects}
           activeProjectId={activeProjectId}
           onOpenNewProject={() => { setNavigationOpen(false); setIsNewProjectOpen(true); }}
+          onOpenNewSuite={() => { setNavigationOpen(false); setIsNewSuiteOpen(true); }}
         />
       </div>
       {navigationOpen && <button type="button" className="loom-sidebar-backdrop" tabIndex={-1}
@@ -522,6 +539,17 @@ export default function App() {
         onClose={() => setIsNewProjectOpen(false)}
         engines={engines}
         onCreateProject={handleCreateProject}
+      />
+
+      {/* 6. New Suite Modal */}
+      <NewSuiteModal
+        isOpen={isNewSuiteOpen}
+        projectId={activeProjectId}
+        projectName={activeProject?.name ?? ""}
+        defaultEngine={activeProject?.defaultEngine ?? selectedEngineId}
+        targetHost={activeProject?.targetHost ?? config.target.host}
+        onClose={() => setIsNewSuiteOpen(false)}
+        onCreate={handleCreateSuite}
       />
     </div>
   );
