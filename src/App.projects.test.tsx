@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "./types";
-import { getRunHistory, listEngines, listProjects, listSuites, subscribeToRunFinished } from "./lib/ipc";
+import { getRunHistory, getSuite, listEngines, listProjects, listSuites, subscribeToRunFinished } from "./lib/ipc";
 
 const { startRun } = vi.hoisted(() => ({ startRun: vi.fn() }));
 vi.mock("./lib/ipc", () => ({
@@ -16,6 +16,7 @@ vi.mock("./lib/ipc", () => ({
   stopRun: vi.fn(),
   saveScript: vi.fn(),
   readScript: vi.fn().mockResolvedValue(""),
+  getSuite: vi.fn(),
   getRunHistory: vi.fn().mockResolvedValue([]),
   subscribeToMetrics: vi.fn().mockResolvedValue(() => {}),
   subscribeToLogs: vi.fn().mockResolvedValue(() => {}),
@@ -52,6 +53,7 @@ beforeEach(() => {
   vi.mocked(listProjects).mockResolvedValue([]);
   vi.mocked(listSuites).mockReset();
   vi.mocked(listSuites).mockResolvedValue([]);
+  vi.mocked(getSuite).mockReset();
   vi.mocked(getRunHistory).mockReset();
   vi.mocked(getRunHistory).mockResolvedValue([]);
   vi.mocked(subscribeToRunFinished).mockReset();
@@ -209,19 +211,30 @@ describe("project startup and run gating", () => {
   it("keeps a script draft mounted while switching workspace tabs and closes inactive tabs", async () => {
     const user = userEvent.setup();
     seedProjects([configuredProject]);
+    vi.mocked(getSuite).mockResolvedValue({
+      ...configuredProject.suites[0],
+      projectId: configuredProject.id,
+      scriptContent: "print('draft content')",
+      visualNodes: undefined,
+    });
     render(<App />);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run Test" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: /Configured Suite/ }));
     await user.click(screen.getByRole("button", { name: "Script editor" }));
-    const source = screen.getByRole("textbox", { name: "Script source" });
-    await user.type(source, "draft content");
-    expect(source).toHaveValue("draft content");
+    await user.click(await screen.findByRole("tab", { name: "Code" }));
+    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(screen.getByRole("tab", { name: "Overview" }));
     await user.click(screen.getByRole("tab", { name: "Script editor" }));
-    expect(screen.getByRole("textbox", { name: "Script source" })).toHaveValue("draft content");
+    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Script editor" }));
     expect(screen.getAllByRole("tab", { name: "Script editor" })).toHaveLength(1);
 
+    // Selecting the suite also opened the runner tab, so close it first to
+    // restore the original single-editor-tab close scenario.
+    await user.click(screen.getByRole("button", { name: "Close configured.py tab" }));
+    expect(screen.queryByRole("tab", { name: "configured.py" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close Script editor tab" }));
     expect(screen.queryByRole("tab", { name: "Script editor" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
