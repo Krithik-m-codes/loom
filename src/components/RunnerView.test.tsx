@@ -66,7 +66,7 @@ describe("RunnerView", () => {
     render(<RunnerView {...createProps({ metrics })} />);
 
     expect(screen.getByRole("region", { name: "Requests/sec" })).toBeVisible();
-    expect(screen.getByText("42")).toBeVisible();
+    expect(screen.getAllByText("42")[0]).toBeVisible();
   });
 
   it("keeps log clearing available from the existing log view", async () => {

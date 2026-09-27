@@ -13,7 +13,6 @@ import {
   Globe,
   Layers,
   Play,
-  Search,
   Sliders,
   Square,
   Terminal,

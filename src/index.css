@@ -2616,6 +2616,24 @@
   .loom-history__controls .loom-search {
     width: 18rem;
   }
+
+  .loom-runner__controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .loom-runner__target-controls,
+  .loom-runner__run-state {
+    justify-content: space-between;
+  }
+
+  .loom-runner__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .loom-runner__charts {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (pointer: coarse) {
