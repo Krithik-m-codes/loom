@@ -1,17 +1,18 @@
 import { useState } from "react";
 import {
-  Trash2,
+  Check,
+  CheckCircle,
+  Clock,
+  Copy,
   FileCode,
   Globe,
-  Clock,
-  CheckCircle,
-  Repeat,
-  Sparkles,
   Layers,
+  Repeat,
   Send,
-  Copy,
-  Check,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
+import { LoomButton } from "./ui/LoomButton";
 
 export interface FlowNode {
   id: string;
@@ -33,148 +34,80 @@ interface FlowchartBuilderViewProps {
   targetHost: string;
 }
 
-export const FlowchartBuilderView = ({
-  onExportToRunner,
-  targetHost,
-}: FlowchartBuilderViewProps) => {
-  const [nodes, setNodes] = useState<FlowNode[]>([
-    {
-      id: "node-1",
-      type: "start",
-      title: "Test Entrypoint (Load Profile)",
-      x: 60,
-      y: 60,
-    },
-    {
-      id: "node-2",
-      type: "http",
-      title: "Homepage Browse",
-      method: "GET",
-      path: "/",
-      x: 60,
-      y: 190,
-    },
-    {
-      id: "node-3",
-      type: "think_time",
-      title: "User Reading Delay",
-      delaySeconds: 2,
-      x: 60,
-      y: 320,
-    },
-    {
-      id: "node-4",
-      type: "http",
-      title: "User Login Action",
-      method: "POST",
-      path: "/api/v1/auth/login",
-      payload: '{"username": "test_user", "password": "secure_password"}',
-      x: 60,
-      y: 450,
-    },
-    {
-      id: "node-5",
-      type: "assertion",
-      title: "Verify 200 OK & Latency < 400ms",
-      expectedStatus: 200,
-      maxLatencyMs: 400,
-      x: 60,
-      y: 580,
-    },
-  ]);
+const initialNodes: FlowNode[] = [
+  { id: "node-1", type: "start", title: "Test Entrypoint (Load Profile)", x: 60, y: 60 },
+  { id: "node-2", type: "http", title: "Homepage Browse", method: "GET", path: "/", x: 60, y: 190 },
+  { id: "node-3", type: "think_time", title: "User Reading Delay", delaySeconds: 2, x: 60, y: 320 },
+  {
+    id: "node-4",
+    type: "http",
+    title: "User Login Action",
+    method: "POST",
+    path: "/api/v1/auth/login",
+    payload: '{"username": "test_user", "password": "secure_password"}',
+    x: 60,
+    y: 450,
+  },
+  {
+    id: "node-5",
+    type: "assertion",
+    title: "Verify 200 OK & Latency < 400ms",
+    expectedStatus: 200,
+    maxLatencyMs: 400,
+    x: 60,
+    y: 580,
+  },
+];
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string>("node-2");
+const nodeDetails: Record<Exclude<FlowNode["type"], "start">, { label: string; detail: string; icon: typeof Globe }> = {
+  http: { label: "HTTP Request", detail: "GET, POST, JSON", icon: Globe },
+  think_time: { label: "Think Time", detail: "Pause between steps", icon: Clock },
+  assertion: { label: "Assertion", detail: "Status & latency", icon: CheckCircle },
+  loop: { label: "Loop Block", detail: "Repeat transactions", icon: Repeat },
+};
+
+export const FlowchartBuilderView = ({ onExportToRunner, targetHost }: FlowchartBuilderViewProps) => {
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes);
+  const [selectedNodeId, setSelectedNodeId] = useState("node-2");
   const [previewLanguage, setPreviewLanguage] = useState<"locust" | "k6">("locust");
-  const [copiedScript, setCopiedScript] = useState<boolean>(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
-
-  const addNode = (type: FlowNode["type"]) => {
+  const addNode = (type: Exclude<FlowNode["type"], "start">) => {
     const newY = nodes.length > 0 ? nodes[nodes.length - 1].y + 130 : 60;
-    const newId = `node-${Date.now()}`;
-    let newNode: FlowNode;
-
-    switch (type) {
-      case "http":
-        newNode = {
-          id: newId,
-          type: "http",
-          title: "API Request",
-          method: "GET",
-          path: "/api/endpoint",
-          x: 60,
-          y: newY,
-        };
-        break;
-      case "think_time":
-        newNode = {
-          id: newId,
-          type: "think_time",
-          title: "Simulated Delay",
-          delaySeconds: 1,
-          x: 60,
-          y: newY,
-        };
-        break;
-      case "assertion":
-        newNode = {
-          id: newId,
-          type: "assertion",
-          title: "Assert Status OK",
-          expectedStatus: 200,
-          maxLatencyMs: 500,
-          x: 60,
-          y: newY,
-        };
-        break;
-      case "loop":
-        newNode = {
-          id: newId,
-          type: "loop",
-          title: "Repeat Transaction",
-          iterations: 3,
-          x: 60,
-          y: newY,
-        };
-        break;
-      default:
-        return;
-    }
-
-    setNodes((prev) => [...prev, newNode]);
-    setSelectedNodeId(newId);
+    const id = `node-${Date.now()}`;
+    const defaults: Record<Exclude<FlowNode["type"], "start">, Omit<FlowNode, "id" | "x" | "y">> = {
+      http: { type: "http", title: "API Request", method: "GET", path: "/api/endpoint" },
+      think_time: { type: "think_time", title: "Simulated Delay", delaySeconds: 1 },
+      assertion: { type: "assertion", title: "Assert Status OK", expectedStatus: 200, maxLatencyMs: 500 },
+      loop: { type: "loop", title: "Repeat Transaction", iterations: 3 },
+    };
+    setNodes((current) => [...current, { ...defaults[type], id, x: 60, y: newY }]);
+    setSelectedNodeId(id);
   };
 
   const deleteNode = (id: string) => {
     if (nodes.length <= 1) return;
-    setNodes((prev) => prev.filter((n) => n.id !== id));
-    if (selectedNodeId === id) {
-      setSelectedNodeId(nodes[0].id);
-    }
+    setNodes((current) => current.filter((node) => node.id !== id));
+    if (selectedNodeId === id) setSelectedNodeId(nodes[0].id);
   };
 
-  const updateNodeProperty = (key: keyof FlowNode, value: any) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === selectedNodeId ? { ...n, [key]: value } : n))
-    );
+  const updateNodeProperty = (key: keyof FlowNode, value: FlowNode[keyof FlowNode]) => {
+    setNodes((current) => current.map((node) => node.id === selectedNodeId ? { ...node, [key]: value } : node));
   };
 
-  // Live code generator from visual nodes:
   const generateLocustCode = (): string => {
     let tasksCode = "";
     nodes.forEach((node) => {
       if (node.type === "http") {
         const method = (node.method || "GET").toLowerCase();
-        if (method === "post" && node.payload) {
-          tasksCode += `        # ${node.title}\n        self.client.${method}("${node.path || "/"}", json=${node.payload}, name="${node.title}")\n`;
-        } else {
-          tasksCode += `        # ${node.title}\n        self.client.${method}("${node.path || "/"}", name="${node.title}")\n`;
-        }
+        tasksCode += method === "post" && node.payload
+          ? `        # ${node.title}\n        self.client.${method}("${node.path || "/"}", json=${node.payload}, name="${node.title}")\n`
+          : `        # ${node.title}\n        self.client.${method}("${node.path || "/"}", name="${node.title}")\n`;
       } else if (node.type === "think_time") {
         tasksCode += `        # Think time: ${node.delaySeconds || 1}s\n        import time; time.sleep(${node.delaySeconds || 1})\n`;
       }
     });
-
     return `"""
 Generated by Loom Visual Flow Designer
 Target Host: ${targetHost || "http://localhost:8080"}
@@ -196,16 +129,13 @@ ${tasksCode || '        self.client.get("/", name="Homepage")\n'}
     nodes.forEach((node) => {
       if (node.type === "http") {
         const method = (node.method || "GET").toLowerCase();
-        if (method === "post") {
-          stepsCode += `  // ${node.title}\n  let res = http.post(target + '${node.path || "/"}', '${node.payload || "{}"}', { headers: { 'Content-Type': 'application/json' } });\n  check(res, { '${node.title} 200': (r) => r.status === 200 });\n`;
-        } else {
-          stepsCode += `  // ${node.title}\n  let res = http.get(target + '${node.path || "/"}');\n  check(res, { '${node.title} 200': (r) => r.status === 200 });\n`;
-        }
+        stepsCode += method === "post"
+          ? `  // ${node.title}\n  let res = http.post(target + '${node.path || "/"}', '${node.payload || "{}"}', { headers: { 'Content-Type': 'application/json' } });\n  check(res, { '${node.title} 200': (r) => r.status === 200 });\n`
+          : `  // ${node.title}\n  let res = http.get(target + '${node.path || "/"}');\n  check(res, { '${node.title} 200': (r) => r.status === 200 });\n`;
       } else if (node.type === "think_time") {
         stepsCode += `  sleep(${node.delaySeconds || 1});\n`;
       }
     });
-
     return `// Generated by Loom Visual Flow Designer
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -226,344 +156,126 @@ ${stepsCode}
 `;
   };
 
-  const activeGeneratedScript =
-    previewLanguage === "locust" ? generateLocustCode() : generateK6Code();
-
-  const handleSendToRunner = () => {
-    onExportToRunner(activeGeneratedScript, previewLanguage);
+  const activeGeneratedScript = previewLanguage === "locust" ? generateLocustCode() : generateK6Code();
+  const copyScript = async () => {
+    await navigator.clipboard.writeText(activeGeneratedScript);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2000);
   };
 
   return (
-    <div className="flex-1 flex h-full bg-[#0A0A0B] overflow-hidden select-none">
-      {/* 1. Left Component Palette */}
-      <div className="w-[240px] bg-[#141518] border-r border-[#26282D] p-4 flex flex-col gap-2.5">
-        <div className="text-[11px] font-mono font-bold text-[#5C6068] uppercase tracking-wider px-1">
-          Add Scenario Nodes
+    <main className="loom-flow-builder" aria-label="Visual flow builder">
+      <aside className="loom-node-palette" aria-label="Add scenario nodes">
+        <p className="loom-overline">Add scenario nodes</p>
+        {(Object.keys(nodeDetails) as Array<Exclude<FlowNode["type"], "start">>).map((type) => {
+          const detail = nodeDetails[type];
+          const Icon = detail.icon;
+          return (
+            <button key={type} type="button" className="loom-node-palette__button" onClick={() => addNode(type)}>
+              <span className="loom-node-palette__icon"><Icon aria-hidden="true" /></span>
+              <span><strong>{detail.label}</strong><small>{detail.detail}</small></span>
+            </button>
+          );
+        })}
+        <div className="loom-node-palette__hint">
+          <Sparkles aria-hidden="true" />
+          <strong>Interactive graph</strong>
+          <span>Nodes execute sequentially to simulate a user workflow under load.</span>
         </div>
+      </aside>
 
-        <button
-          onClick={() => addNode("http")}
-          className="flex items-center gap-3 p-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] hover:border-[#38BDF8] hover:bg-[#1C1E22]/90 text-[13px] font-medium transition-all text-left shadow-sm"
-        >
-          <div className="w-8 h-8 rounded-[4px] bg-[#38BDF8]/10 border border-[#38BDF8]/25 flex items-center justify-center shrink-0">
-            <Globe className="w-4 h-4 text-[#38BDF8]" />
-          </div>
-          <div>
-            <div className="leading-tight font-semibold">HTTP Request</div>
-            <div className="text-[11px] text-[#9CA0A8] mt-0.5">GET, POST, JSON</div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => addNode("think_time")}
-          className="flex items-center gap-3 p-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] hover:border-[#F5A623] hover:bg-[#1C1E22]/90 text-[13px] font-medium transition-all text-left shadow-sm"
-        >
-          <div className="w-8 h-8 rounded-[4px] bg-[#F5A623]/10 border border-[#F5A623]/25 flex items-center justify-center shrink-0">
-            <Clock className="w-4 h-4 text-[#F5A623]" />
-          </div>
-          <div>
-            <div className="leading-tight font-semibold">Think Time</div>
-            <div className="text-[11px] text-[#9CA0A8] mt-0.5">Pause between steps</div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => addNode("assertion")}
-          className="flex items-center gap-3 p-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] hover:border-[#4ADE80] hover:bg-[#1C1E22]/90 text-[13px] font-medium transition-all text-left shadow-sm"
-        >
-          <div className="w-8 h-8 rounded-[4px] bg-[#4ADE80]/10 border border-[#4ADE80]/25 flex items-center justify-center shrink-0">
-            <CheckCircle className="w-4 h-4 text-[#4ADE80]" />
-          </div>
-          <div>
-            <div className="leading-tight font-semibold">Assertion</div>
-            <div className="text-[11px] text-[#9CA0A8] mt-0.5">Status & Latency</div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => addNode("loop")}
-          className="flex items-center gap-3 p-3 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] hover:border-[#C084FC] hover:bg-[#1C1E22]/90 text-[13px] font-medium transition-all text-left shadow-sm"
-        >
-          <div className="w-8 h-8 rounded-[4px] bg-[#C084FC]/10 border border-[#C084FC]/25 flex items-center justify-center shrink-0">
-            <Repeat className="w-4 h-4 text-[#C084FC]" />
-          </div>
-          <div>
-            <div className="leading-tight font-semibold">Loop Block</div>
-            <div className="text-[11px] text-[#9CA0A8] mt-0.5">Repeat transactions</div>
-          </div>
-        </button>
-
-        <div className="mt-auto p-4 rounded-[6px] bg-[#1C1E22] border border-[#26282D] text-[12px] text-[#9CA0A8]">
-          <div className="flex items-center gap-1.5 text-[#E8E9EB] font-semibold mb-1">
-            <Sparkles className="w-4 h-4 text-[#A3E635]" />
-            <span>Interactive Graph</span>
-          </div>
-          Nodes execute sequentially to simulate user workflows under load.
-        </div>
-      </div>
-
-      {/* 2. Interactive Center Canvas */}
-      <div className="flex-1 bg-[#0A0A0B] relative overflow-y-auto p-10 flex flex-col items-center">
-        {/* Canvas Background Grid */}
-        <div
-          className="absolute inset-0 opacity-[0.04] pointer-events-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, #E8E9EB 1px, transparent 0)",
-            backgroundSize: "24px 24px",
-          }}
-        />
-
-        {/* Nodes Sequential Flow */}
-        <div className="relative z-10 flex flex-col items-center gap-4 w-[420px]">
-          {nodes.map((node, idx) => {
-            const isSelected = selectedNodeId === node.id;
-            return (
-              <div key={node.id} className="w-full flex flex-col items-center">
-                {/* Node Card */}
-                <div
+      <section className="loom-canvas" aria-label="Scenario canvas">
+        <div className="loom-canvas__flow">
+          {nodes.map((node, index) => (
+            <div className="loom-canvas__step" key={node.id}>
+              <div className="loom-canvas__node-row">
+                <button
+                  type="button"
+                  className={`loom-node ${selectedNodeId === node.id ? "loom-node--selected" : ""}`}
                   onClick={() => setSelectedNodeId(node.id)}
-                  className={`w-full p-4 rounded-[8px] border transition-all cursor-pointer shadow-md ${
-                    isSelected
-                      ? "bg-[#1C1E22] border-[#A3E635] ring-2 ring-[#A3E635]/30 shadow-[0_0_16px_rgba(163,230,53,0.15)]"
-                      : "bg-[#141518] border-[#26282D] hover:border-[#3A3D44]"
-                  }`}
+                  aria-pressed={selectedNodeId === node.id}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2.5">
-                      {node.type === "start" && (
-                        <div className="w-3 h-3 rounded-full bg-[#4ADE80] shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
-                      )}
-                      {node.type === "http" && (
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-[#38BDF8]/15 text-[#38BDF8] border border-[#38BDF8]/30">
-                          {node.method || "GET"}
-                        </span>
-                      )}
-                      {node.type === "think_time" && (
-                        <Clock className="w-4 h-4 text-[#F5A623]" />
-                      )}
-                      {node.type === "assertion" && (
-                        <CheckCircle className="w-4 h-4 text-[#4ADE80]" />
-                      )}
-                      <span className="font-bold text-[14px] text-[#E8E9EB]">
-                        {node.title}
-                      </span>
-                    </div>
-
-                    {node.type !== "start" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteNode(node.id);
-                        }}
-                        className="p-1 rounded text-[#5C6068] hover:text-[#F87171] hover:bg-[#26282D] transition-colors"
-                        title="Delete node"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="text-[12px] font-mono text-[#9CA0A8] truncate pl-1">
+                  <span className="loom-node__title">
+                    {node.type === "start" && <span className="loom-node__start-dot" aria-hidden="true" />}
+                    {node.type === "http" && <span className="loom-node__method">{node.method || "GET"}</span>}
+                    {node.type === "think_time" && <Clock aria-hidden="true" />}
+                    {node.type === "assertion" && <CheckCircle aria-hidden="true" />}
+                    {node.type === "loop" && <Repeat aria-hidden="true" />}
+                    <strong>{node.title}</strong>
+                  </span>
+                  <span className="loom-node__detail">
                     {node.type === "http" && (node.path || "/")}
                     {node.type === "think_time" && `Wait ${node.delaySeconds || 1}s delay`}
-                    {node.type === "assertion" &&
-                      `Status == ${node.expectedStatus || 200}, <${node.maxLatencyMs || 500}ms`}
-                    {node.type === "start" && "Concurrent Load Profile Generator"}
-                  </div>
-                </div>
-
-                {/* Connecting Arrow */}
-                {idx < nodes.length - 1 && (
-                  <div className="h-7 w-0.5 bg-[#3A3D44] my-1 relative flex items-center justify-center">
-                    <div className="w-2 h-2 rotate-45 border-r-2 border-b-2 border-[#A3E635] translate-y-2.5" />
-                  </div>
+                    {node.type === "assertion" && `Status == ${node.expectedStatus || 200}, <${node.maxLatencyMs || 500}ms`}
+                    {node.type === "loop" && `Repeat ${node.iterations || 3} times`}
+                    {node.type === "start" && "Concurrent load profile generator"}
+                  </span>
+                </button>
+                {node.type !== "start" && (
+                  <button type="button" className="loom-icon-button loom-node__delete" onClick={() => deleteNode(node.id)} aria-label={`Delete ${node.title}`}>
+                    <Trash2 aria-hidden="true" />
+                  </button>
                 )}
               </div>
-            );
-          })}
+              {index < nodes.length - 1 && <span className="loom-canvas__connector" aria-hidden="true" />}
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
 
-      {/* 3. Right Property Inspector & Code Preview Drawer */}
-      <div className="w-[420px] bg-[#141518] border-l border-[#26282D] flex flex-col h-full">
-        {/* Inspector Header */}
-        <div className="h-[52px] px-4 border-b border-[#26282D] flex items-center justify-between">
-          <div className="text-[13px] font-bold text-[#E8E9EB] flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#A3E635]" />
-            <span>Step Inspector</span>
-          </div>
-
-          <button
-            onClick={handleSendToRunner}
-            className="btn-primary text-[12px] px-3.5 py-1.5 gap-1.5 font-bold tracking-wide"
-          >
-            <Send className="w-3.5 h-3.5 fill-current" />
-            <span>Transfer to Runner</span>
-          </button>
-        </div>
-
-        {/* Selected Node Properties */}
-        <div className="p-4 border-b border-[#26282D] bg-[#141518] flex flex-col gap-3.5 max-h-[280px] overflow-y-auto">
-          <div>
-            <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-              Step Title
+      <aside className="loom-flow-inspector" aria-label="Step inspector">
+        <header className="loom-flow-inspector__header">
+          <span><Layers aria-hidden="true" /> Step inspector</span>
+          <LoomButton className="loom-button--compact" onClick={() => onExportToRunner(activeGeneratedScript, previewLanguage)}>
+            <Send aria-hidden="true" /> Send to Runner
+          </LoomButton>
+        </header>
+        <section className="loom-flow-inspector__fields">
+          <label className="loom-form-field">Step title
+            <input value={selectedNode.title} onChange={(event) => updateNodeProperty("title", event.target.value)} />
+          </label>
+          {selectedNode.type === "http" && <>
+            <label className="loom-form-field">Method
+              <select value={selectedNode.method || "GET"} onChange={(event) => updateNodeProperty("method", event.target.value as FlowNode["method"])}>
+                <option value="GET">GET</option><option value="POST">POST</option><option value="PUT">PUT</option><option value="DELETE">DELETE</option>
+              </select>
             </label>
-            <input
-              type="text"
-              value={selectedNode.title}
-              onChange={(e) => updateNodeProperty("title", e.target.value)}
-              className="w-full h-[34px] px-3 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] text-[13px] outline-none focus:border-[#A3E635]"
-            />
-          </div>
-
-          {selectedNode.type === "http" && (
-            <>
-              <div className="flex gap-2.5">
-                <div className="w-[100px]">
-                  <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                    Method
-                  </label>
-                  <select
-                    value={selectedNode.method || "GET"}
-                    onChange={(e) => updateNodeProperty("method", e.target.value)}
-                    className="w-full h-[34px] px-2.5 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#38BDF8] font-mono font-bold text-[12px] outline-none cursor-pointer focus:border-[#38BDF8]"
-                  >
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                    Endpoint Path
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedNode.path || "/"}
-                    onChange={(e) => updateNodeProperty("path", e.target.value)}
-                    placeholder="/api/v1/..."
-                    className="w-full h-[34px] px-3 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[12px] outline-none focus:border-[#A3E635]"
-                  />
-                </div>
-              </div>
-
-              {selectedNode.method === "POST" && (
-                <div>
-                  <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                    JSON Payload
-                  </label>
-                  <textarea
-                    value={selectedNode.payload || "{}"}
-                    onChange={(e) => updateNodeProperty("payload", e.target.value)}
-                    rows={3}
-                    className="w-full p-2.5 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#4ADE80] font-mono text-[12px] outline-none resize-none focus:border-[#4ADE80]"
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          {selectedNode.type === "think_time" && (
-            <div>
-              <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                Delay Duration (seconds)
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                step="0.5"
-                value={selectedNode.delaySeconds || 1}
-                onChange={(e) =>
-                  updateNodeProperty("delaySeconds", parseFloat(e.target.value) || 1)
-                }
-                className="w-full h-[34px] px-3 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-              />
-            </div>
-          )}
-
-          {selectedNode.type === "assertion" && (
-            <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                  Status Code
-                </label>
-                <input
-                  type="number"
-                  value={selectedNode.expectedStatus || 200}
-                  onChange={(e) =>
-                    updateNodeProperty("expectedStatus", parseInt(e.target.value) || 200)
-                  }
-                  className="w-full h-[34px] px-3 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-mono uppercase text-[#9CA0A8] mb-1.5 block font-semibold">
-                  Max Latency (ms)
-                </label>
-                <input
-                  type="number"
-                  value={selectedNode.maxLatencyMs || 500}
-                  onChange={(e) =>
-                    updateNodeProperty("maxLatencyMs", parseInt(e.target.value) || 500)
-                  }
-                  className="w-full h-[34px] px-3 rounded-[4px] bg-[#1C1E22] border border-[#26282D] text-[#E8E9EB] font-mono text-[13px] outline-none focus:border-[#A3E635]"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Live Generated Code Preview */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0A0A0B]">
-          <div className="h-[40px] px-3.5 border-b border-[#26282D] flex items-center justify-between bg-[#141518]">
-            <div className="flex items-center gap-2">
-              <FileCode className="w-4 h-4 text-[#A3E635]" />
-              <span className="text-[12px] font-mono text-[#E8E9EB] font-semibold">Generated Code</span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setPreviewLanguage("locust")}
-                className={`px-2.5 py-1 rounded-[4px] text-[11px] font-mono font-medium transition-all ${
-                  previewLanguage === "locust"
-                    ? "bg-[#A3E635]/15 text-[#A3E635] border border-[#A3E635]/30 font-bold"
-                    : "text-[#9CA0A8] hover:text-[#E8E9EB]"
-                }`}
-              >
-                Python (Locust)
-              </button>
-              <button
-                onClick={() => setPreviewLanguage("k6")}
-                className={`px-2.5 py-1 rounded-[4px] text-[11px] font-mono font-medium transition-all ${
-                  previewLanguage === "k6"
-                    ? "bg-[#C084FC]/15 text-[#C084FC] border border-[#C084FC]/30 font-bold"
-                    : "text-[#9CA0A8] hover:text-[#E8E9EB]"
-                }`}
-              >
-                JS (k6)
-              </button>
-
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(activeGeneratedScript);
-                  setCopiedScript(true);
-                  setTimeout(() => setCopiedScript(false), 2000);
-                }}
-                className="btn-ghost text-[11px] gap-1 px-2 py-1 ml-1 text-[#9CA0A8] hover:text-[#E8E9EB]"
-              >
-                {copiedScript ? <Check className="w-3.5 h-3.5 text-[#4ADE80]" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedScript ? "Copied" : "Copy"}</span>
+            <label className="loom-form-field">Endpoint path
+              <input value={selectedNode.path || "/"} placeholder="/api/v1/..." onChange={(event) => updateNodeProperty("path", event.target.value)} />
+            </label>
+            {selectedNode.method === "POST" && <label className="loom-form-field">JSON payload
+              <textarea rows={3} value={selectedNode.payload || "{}"} onChange={(event) => updateNodeProperty("payload", event.target.value)} />
+            </label>}
+          </>}
+          {selectedNode.type === "think_time" && <label className="loom-form-field">Delay duration (seconds)
+            <input type="number" min="0.1" step="0.5" value={selectedNode.delaySeconds || 1} onChange={(event) => updateNodeProperty("delaySeconds", Number(event.target.value) || 1)} />
+          </label>}
+          {selectedNode.type === "assertion" && <div className="loom-form-field-row">
+            <label className="loom-form-field">Status code
+              <input type="number" value={selectedNode.expectedStatus || 200} onChange={(event) => updateNodeProperty("expectedStatus", Number(event.target.value) || 200)} />
+            </label>
+            <label className="loom-form-field">Max latency (ms)
+              <input type="number" value={selectedNode.maxLatencyMs || 500} onChange={(event) => updateNodeProperty("maxLatencyMs", Number(event.target.value) || 500)} />
+            </label>
+          </div>}
+          {selectedNode.type === "loop" && <label className="loom-form-field">Iterations
+            <input type="number" min="1" value={selectedNode.iterations || 3} onChange={(event) => updateNodeProperty("iterations", Number(event.target.value) || 1)} />
+          </label>}
+        </section>
+        <section className="loom-code-preview" aria-label="Generated code">
+          <header className="loom-code-preview__header">
+            <span><FileCode aria-hidden="true" /> Generated code</span>
+            <div className="loom-code-preview__controls">
+              <button type="button" className={previewLanguage === "locust" ? "is-active" : ""} onClick={() => setPreviewLanguage("locust")}>Python (Locust)</button>
+              <button type="button" className={previewLanguage === "k6" ? "is-active" : ""} onClick={() => setPreviewLanguage("k6")}>JS (k6)</button>
+              <button type="button" className="loom-code-preview__copy" onClick={copyScript} aria-label="Copy generated code">
+                {copiedScript ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />} {copiedScript ? "Copied" : "Copy"}
               </button>
             </div>
-          </div>
-
-          <pre className="flex-1 p-4 font-mono text-[12px] text-[#E8E9EB] overflow-y-auto leading-relaxed select-text bg-[#0A0A0B]">
-            {activeGeneratedScript}
-          </pre>
-        </div>
-      </div>
-    </div>
+          </header>
+          <pre>{activeGeneratedScript}</pre>
+        </section>
+      </aside>
+    </main>
   );
 };
