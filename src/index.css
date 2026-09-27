@@ -255,10 +255,12 @@
 }
 
 .loom-app-shell {
-  display: flex;
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
-  min-width: 900px;
+  min-width: 0;
   overflow: hidden;
   background: var(--loom-bg);
   color: var(--loom-text);
@@ -735,8 +737,8 @@
 
 .loom-sidebar {
   display: flex;
-  width: 232px;
-  min-width: 232px;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   flex-direction: column;
   border-inline-end: 1px solid var(--loom-border);
@@ -781,6 +783,29 @@
   padding: var(--loom-space-3);
   border-block-end: 1px solid var(--loom-border);
 }
+
+.loom-sidebar__project {
+  max-height: min(48vh, 27rem);
+  overflow-y: auto;
+}
+
+.loom-sidebar__project-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--loom-space-2);
+  min-height: 2.5rem;
+  margin-block: var(--loom-space-2);
+  border: 1px solid color-mix(in srgb, var(--loom-primary) 34%, var(--loom-border));
+  border-radius: var(--loom-radius-control);
+  background: color-mix(in srgb, var(--loom-primary) 8%, var(--loom-bg-secondary));
+  color: var(--loom-text);
+  padding-inline: var(--loom-space-2);
+  font-weight: 650;
+}
+
+.loom-sidebar__project-name svg { flex: 0 0 auto; color: var(--loom-primary); }
+.loom-sidebar__empty { margin: var(--loom-space-2) 0 0; color: var(--loom-text-secondary); font-size: 0.75rem; line-height: 1.5; }
 
 .loom-sidebar__project-heading,
 .loom-sidebar__engines-heading {
@@ -1215,6 +1240,125 @@
 .loom-topbar__run {
   min-height: 2.5rem;
   padding-block: 0.5rem;
+}
+
+.loom-topnav { grid-column: 1 / -1; grid-row: 1; min-width: 0; background: var(--loom-surface); }
+.loom-sidebar-slot { grid-column: 1; grid-row: 2; min-height: 0; }
+.loom-workspace { display: flex; grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.loom-workspace__content { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.loom-workspace__panel { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.loom-workspace__panel[hidden] { display: none; }
+
+.loom-contextbar {
+  display: flex;
+  min-height: 3.625rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--loom-space-3);
+  border-block-end: 1px solid var(--loom-border);
+  padding: 0 var(--loom-space-3);
+}
+
+.loom-contextbar__identity,
+.loom-contextbar__controls { display: flex; min-width: 0; align-items: center; gap: var(--loom-space-2); }
+.loom-contextbar__identity { flex: 0 1 auto; }
+.loom-contextbar__controls { flex: 0 1 auto; justify-content: flex-end; }
+.loom-contextbar__identity .loom-logo { flex: 0 0 auto; margin-inline-end: var(--loom-space-2); }
+.loom-contextbar__identity .loom-logo__descriptor { display: none; }
+.loom-contextbar__identity .loom-project-switcher { width: clamp(10rem, 17vw, 16rem); min-width: 0; }
+.loom-contextbar__identity .loom-project-switcher__trigger { min-height: 2.375rem; }
+.loom-project-switcher__empty { margin: 0; color: var(--loom-text-secondary); font-size: 0.75rem; padding: var(--loom-space-2); }
+
+.loom-contextbar__menu,
+.loom-contextbar__create,
+.loom-contextbar__icon,
+.loom-workspace-tabs__add-button,
+.loom-workspace-tab__close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.375rem;
+  height: 2.375rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--loom-radius-small);
+  background: transparent;
+  color: var(--loom-text-secondary);
+}
+
+.loom-contextbar__menu { display: none; }
+.loom-contextbar__create { color: var(--loom-primary); }
+.loom-contextbar__create:hover,
+.loom-contextbar__icon:hover,
+.loom-workspace-tabs__add-button:hover,
+.loom-workspace-tab__close:hover { border-color: var(--loom-border-hover); background: var(--loom-surface-elevated); color: var(--loom-text); }
+
+.loom-contextbar__engine {
+  display: flex;
+  min-height: 2.375rem;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--loom-border-hover);
+  border-radius: var(--loom-radius-control);
+  background: var(--loom-bg-secondary);
+  color: var(--loom-text-secondary);
+  font-family: var(--loom-font-mono);
+  font-size: 0.6875rem;
+  padding-inline: 0.625rem;
+}
+
+.loom-contextbar__engine select { max-width: 7rem; border: 0; background: transparent; color: var(--loom-text); font: inherit; }
+.loom-contextbar__engine option { background: var(--loom-surface); color: var(--loom-text); }
+.loom-contextbar__engine:focus-within { border-color: var(--loom-primary); }
+.loom-contextbar__run-status { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 4.75rem; color: var(--loom-text-secondary); font-size: 0.75rem; }
+.loom-contextbar__status-dot { display: block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--loom-text-muted); }
+.loom-contextbar__run-status.is-running { color: var(--loom-text); }
+.loom-contextbar__run-status.is-running .loom-contextbar__status-dot { background: var(--loom-green); animation: loom-pulse 1.2s var(--loom-ease-out) infinite; }
+
+.loom-workspace-tabs {
+  display: flex;
+  min-width: 0;
+  height: 2.75rem;
+  align-items: stretch;
+  gap: var(--loom-space-1);
+  border-block-end: 1px solid var(--loom-border);
+  background: var(--loom-bg-secondary);
+  padding-inline-start: 232px;
+}
+
+.loom-workspace-tabs__list { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.loom-workspace-tab { display: flex; flex: 0 0 auto; align-items: center; border-inline-end: 1px solid var(--loom-border); }
+.loom-workspace-tab.is-active { background: var(--loom-surface-elevated); }
+.loom-workspace-tab .loom-tab { min-height: 2.75rem; padding: 0.625rem 0.375rem 0.625rem 0.75rem; }
+.loom-workspace-tab .loom-tab > .loom-truncate { max-width: 9rem; }
+.loom-workspace-tab.is-active .loom-tab { color: var(--loom-text); }
+.loom-workspace-tab.is-active .loom-tab svg { color: var(--loom-primary); }
+.loom-workspace-tab__close { width: 1.75rem; height: 1.75rem; margin-inline: 0.125rem 0.375rem; }
+.loom-workspace-tabs__add { position: relative; flex: 0 0 auto; align-self: center; }
+.loom-workspace-tabs__add-button { width: 2rem; height: 2rem; }
+.loom-workspace-tabs__menu { position: absolute; z-index: 35; top: calc(100% + 0.375rem); left: 0; display: grid; min-width: 10rem; border: 1px solid var(--loom-border-hover); border-radius: var(--loom-radius-control); background: var(--loom-surface-elevated); box-shadow: var(--loom-shadow-floating); padding: 0.25rem; }
+.loom-workspace-tabs__menu button { border: 0; border-radius: var(--loom-radius-small); background: transparent; color: var(--loom-text); padding: 0.5rem; text-align: start; }
+.loom-workspace-tabs__menu button:hover { background: color-mix(in srgb, var(--loom-primary) 10%, transparent); }
+.loom-workspace-tabs__menu p { margin: 0; color: var(--loom-text-secondary); font-size: 0.75rem; padding: 0.5rem; }
+.loom-sidebar-backdrop { display: none; }
+
+@media (max-width: 1200px) {
+  .loom-contextbar { flex-wrap: wrap; padding-block: 0.5rem; }
+  .loom-contextbar__controls { flex-wrap: wrap; }
+}
+
+@media (max-width: 760px) {
+  .loom-app-shell { grid-template-columns: minmax(0, 1fr); }
+  .loom-contextbar__menu { display: grid; }
+  .loom-contextbar__identity { width: 100%; }
+  .loom-contextbar__identity .loom-project-switcher { flex: 1; }
+  .loom-contextbar__controls { width: 100%; justify-content: flex-start; }
+  .loom-contextbar__controls .loom-target-input { flex: 1 1 12rem; }
+  .loom-contextbar__controls .loom-target-input input { width: 100%; }
+  .loom-sidebar-slot { position: fixed; z-index: 25; top: 0; bottom: 0; left: 0; width: min(18rem, 82vw); visibility: hidden; transform: translateX(-100%); transition: transform 150ms var(--loom-ease-out), visibility 150ms; box-shadow: var(--loom-shadow-floating); }
+  .loom-sidebar-slot.is-open { visibility: visible; transform: translateX(0); }
+  .loom-sidebar-backdrop { position: fixed; z-index: 24; inset: 0; display: block; width: 100%; border: 0; background: rgb(0 0 0 / 0.56); }
+  .loom-workspace { grid-column: 1; }
+  .loom-workspace-tabs { padding-inline-start: 0; }
 }
 
 .loom-modal-backdrop {

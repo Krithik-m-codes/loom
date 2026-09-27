@@ -151,7 +151,7 @@ describe("project startup and run gating", () => {
     }]);
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "History" }));
+    await user.click(screen.getByRole("button", { name: "Run history" }));
     await user.click(await screen.findByRole("button", { name: "Re-run" }));
     expect(screen.getAllByRole("button", { name: "Run Test" })[0]).toBeDisabled();
     await user.click(screen.getAllByRole("button", { name: "Run Test" })[0]);
@@ -187,5 +187,39 @@ describe("project startup and run gating", () => {
     expect(screen.getByRole("button", { name: "Run Test" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Run Test" }));
     expect(startRun).not.toHaveBeenCalled();
+  });
+
+  it("keeps a script draft mounted while switching workspace tabs and closes inactive tabs", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
+    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Script editor" }));
+    const source = screen.getByRole("textbox", { name: "Script source" });
+    await user.type(source, "draft content");
+    expect(source).toHaveValue("draft content");
+
+    await user.click(screen.getByRole("tab", { name: "Overview" }));
+    await user.click(screen.getByRole("tab", { name: "Script editor" }));
+    expect(screen.getByRole("textbox", { name: "Script source" })).toHaveValue("draft content");
+    await user.click(screen.getByRole("button", { name: "Script editor" }));
+    expect(screen.getAllByRole("tab", { name: "Script editor" })).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Close Script editor tab" }));
+    expect(screen.queryByRole("tab", { name: "Script editor" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveFocus();
+  });
+
+  it("closes narrow workspace navigation with Escape", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const toggle = screen.getByRole("button", { name: "Toggle workspace navigation" });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 });

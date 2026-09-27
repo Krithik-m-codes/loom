@@ -27,6 +27,8 @@ export default function App() {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   // Default to Dashboard directly as requested
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [openTabs, setOpenTabs] = useState<string[]>(["dashboard"]);
+  const [navigationOpen, setNavigationOpen] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [metrics, setMetrics] = useState<NormalizedMetric[]>([]);
@@ -34,6 +36,19 @@ export default function App() {
   const [isCmdkOpen, setIsCmdkOpen] = useState<boolean>(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
   const [flowExportError, setFlowExportError] = useState<string>("");
+
+  const openWorkspaceTab = (tab: string) => {
+    setOpenTabs((current) => current.includes(tab) ? current : [...current, tab]);
+    setActiveTab(tab);
+    setNavigationOpen(false);
+  };
+
+  const closeWorkspaceTab = (tab: string) => {
+    if (tab === "dashboard") return;
+    const remaining = openTabs.filter((id) => id !== tab);
+    setOpenTabs(remaining);
+    if (activeTab === tab) setActiveTab(remaining[remaining.length - 1] ?? "dashboard");
+  };
 
   // Projects state
   const [initialProjectState] = useState(() => {
@@ -130,6 +145,7 @@ export default function App() {
         e.preventDefault();
         setIsCmdkOpen((prev) => !prev);
       }
+      if (e.key === "Escape") setNavigationOpen(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -188,7 +204,7 @@ export default function App() {
     if (isRunning || !canRun) return;
 
     // Reset telemetry & navigate to Locust/Goose-grade runner dashboard
-    setActiveTab("runner");
+    openWorkspaceTab("runner");
     setMetrics([]);
     setLogs([]);
     setIsRunning(true);
@@ -227,7 +243,7 @@ export default function App() {
       if (parsed.load_profile) {
         setConfig(parsed);
       }
-      setActiveTab("runner");
+      openWorkspaceTab("runner");
     } catch (e) {
       console.error("Failed to parse rerun config:", e);
     }
@@ -258,7 +274,7 @@ export default function App() {
       engine,
       script_path: filename,
     }));
-    setActiveTab("runner");
+    openWorkspaceTab("runner");
   };
 
   const handleCompleteOnboarding = () => {
@@ -266,7 +282,7 @@ export default function App() {
       localStorage.setItem("loom_onboarding_completed", "true");
     } catch {}
     setShowOnboarding(false);
-    setActiveTab("dashboard");
+    openWorkspaceTab("dashboard");
   };
 
   const selectedEngineObj = engines.find((e) => e.id === selectedEngineId);
@@ -275,95 +291,122 @@ export default function App() {
   return (
     <div className="loom-app-shell select-none">
       <a className="loom-skip-link" href="#main-content">Skip to workspace content</a>
-      {/* 1. Bruno + Kubus Sidebar */}
-      <Sidebar
-        engines={engines}
-        selectedEngineId={selectedEngineId}
-        onSelectEngine={handleSelectEngine}
+      <TopNav
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        onOpenCmdk={() => setIsCmdkOpen(true)}
-        isRunning={isRunning}
-        selectedScript={config.script_path}
-        onSelectScript={handleSelectScript}
+        openTabs={openTabs}
+        onSelectTab={openWorkspaceTab}
+        onCloseTab={closeWorkspaceTab}
         projects={projects}
         activeProjectId={activeProjectId}
         onSelectProject={handleSelectProject}
         onOpenNewProject={() => setIsNewProjectOpen(true)}
+        engines={engines}
+        selectedEngineId={selectedEngineId}
+        onSelectEngine={handleSelectEngine}
+        selectedEngineName={selectedEngineName}
+        onOpenCmdk={() => setIsCmdkOpen(true)}
+        onToggleNavigation={() => setNavigationOpen((open) => !open)}
+        navigationOpen={navigationOpen}
+        isRunning={isRunning}
+        canRun={canRun}
+        onRunTest={handleRunTest}
+        onStopTest={handleStopTest}
+        targetHost={config.target.host}
+        onChangeTargetHost={(host) => setConfig((prev) => ({ ...prev, target: { ...prev.target, host } }))}
+        activeTestName={config.script_path.split("/").pop() || "Test"}
       />
 
-      {/* 2. Main Work Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Top Horizontal Tab Navigation */}
-        <TopNav
+      <div className={`loom-sidebar-slot ${navigationOpen ? "is-open" : ""}`}>
+        <Sidebar
+          engines={engines}
+          selectedEngineId={selectedEngineId}
+          onSelectEngine={handleSelectEngine}
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          isRunning={isRunning}
-          canRun={canRun}
-          onRunTest={handleRunTest}
-          onStopTest={handleStopTest}
-          selectedEngineName={selectedEngineName}
-          targetHost={config.target.host}
-          onChangeTargetHost={(host) =>
-            setConfig((prev) => ({
-              ...prev,
-              target: { ...prev.target, host },
-            }))
-          }
-          activeTestName={config.script_path.split("/").pop() || "Test"}
+          onSelectTab={openWorkspaceTab}
+          onOpenCmdk={() => setIsCmdkOpen(true)}
+          selectedScript={config.script_path}
+          onSelectScript={handleSelectScript}
+          projects={projects}
+          activeProjectId={activeProjectId}
+          onOpenNewProject={() => setIsNewProjectOpen(true)}
         />
+      </div>
+      {navigationOpen && <button type="button" className="loom-sidebar-backdrop"
+        aria-label="Close workspace navigation" onClick={() => setNavigationOpen(false)} />}
 
-        {/* Tab Views */}
+      <div className="loom-workspace">
         {flowExportError && <p className="loom-action-error" role="alert">{flowExportError}</p>}
-        <div id="main-content" className="flex-1 flex overflow-hidden" tabIndex={-1}>
-          {activeTab === "dashboard" && (
-            <DashboardView
-              engines={engines}
-              onNavigate={setActiveTab}
-              onSelectEngine={handleSelectEngine}
-              targetHost={config.target.host}
-              onRerun={handleRerun}
-            />
+        <div id="main-content" className="loom-workspace__content" tabIndex={-1}>
+          {openTabs.includes("dashboard") && (
+            <div id="workspace-panel-dashboard" role="tabpanel" aria-labelledby="workspace-tab-dashboard"
+              className="loom-workspace__panel" hidden={activeTab !== "dashboard"}>
+              <DashboardView
+                engines={engines}
+                onNavigate={openWorkspaceTab}
+                onSelectEngine={handleSelectEngine}
+                targetHost={config.target.host}
+                onRerun={handleRerun}
+              />
+            </div>
           )}
 
-          {activeTab === "flowchart" && (
-            <FlowchartBuilderView
-              onExportToRunner={handleExportFlowchartScript}
-              targetHost={config.target.host}
-            />
+          {openTabs.includes("flowchart") && (
+            <div id="workspace-panel-flowchart" role="tabpanel" aria-labelledby="workspace-tab-flowchart"
+              className="loom-workspace__panel" hidden={activeTab !== "flowchart"}>
+              <FlowchartBuilderView
+                onExportToRunner={handleExportFlowchartScript}
+                targetHost={config.target.host}
+              />
+            </div>
           )}
 
-          {activeTab === "runner" && (
-            <RunnerView
-              engines={engines}
-              selectedEngineId={selectedEngineId}
-              onSelectEngine={handleSelectEngine}
-              config={config}
-              onChangeConfig={setConfig}
-              isRunning={isRunning}
-              canRun={canRun}
-              onRunTest={handleRunTest}
-              onStopTest={handleStopTest}
-              metrics={metrics}
-              logs={logs}
-              onClearLogs={() => setLogs([])}
-            />
+          {openTabs.includes("runner") && (
+            <div id="workspace-panel-runner" role="tabpanel" aria-labelledby="workspace-tab-runner"
+              className="loom-workspace__panel" hidden={activeTab !== "runner"}>
+              <RunnerView
+                engines={engines}
+                selectedEngineId={selectedEngineId}
+                onSelectEngine={handleSelectEngine}
+                config={config}
+                onChangeConfig={setConfig}
+                isRunning={isRunning}
+                canRun={canRun}
+                onRunTest={handleRunTest}
+                onStopTest={handleStopTest}
+                metrics={metrics}
+                logs={logs}
+                onClearLogs={() => setLogs([])}
+              />
+            </div>
           )}
 
-          {activeTab === "editor" && (
-            <ScriptEditorView
-              scriptPath={config.script_path}
-              onSelectScript={handleSelectScript}
-              onRunTest={() => {
-                setActiveTab("runner");
-                handleRunTest();
-              }}
-            />
+          {openTabs.includes("editor") && (
+            <div id="workspace-panel-editor" role="tabpanel" aria-labelledby="workspace-tab-editor"
+              className="loom-workspace__panel" hidden={activeTab !== "editor"}>
+              <ScriptEditorView
+                scriptPath={config.script_path}
+                onSelectScript={handleSelectScript}
+                onRunTest={() => {
+                  openWorkspaceTab("runner");
+                  handleRunTest();
+                }}
+              />
+            </div>
           )}
 
-          {activeTab === "history" && <HistoryView onRerun={handleRerun} />}
+          {openTabs.includes("history") && (
+            <div id="workspace-panel-history" role="tabpanel" aria-labelledby="workspace-tab-history"
+              className="loom-workspace__panel" hidden={activeTab !== "history"}>
+              <HistoryView onRerun={handleRerun} />
+            </div>
+          )}
 
-          {activeTab === "engines" && <EnginesView engines={engines} />}
+          {openTabs.includes("engines") && (
+            <div id="workspace-panel-engines" role="tabpanel" aria-labelledby="workspace-tab-engines"
+              className="loom-workspace__panel" hidden={activeTab !== "engines"}>
+              <EnginesView engines={engines} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -374,7 +417,7 @@ export default function App() {
         onRunTest={handleRunTest}
         onStopTest={handleStopTest}
         isRunning={isRunning}
-        onSelectTab={setActiveTab}
+        onSelectTab={openWorkspaceTab}
         onSelectEngine={handleSelectEngine}
         onSelectScript={handleSelectScript}
       />

@@ -6,7 +6,6 @@ import {
   FileCode2,
   FolderOpen,
   History,
-  Layers,
   LayoutDashboard,
   Plus,
   Settings,
@@ -15,8 +14,6 @@ import {
   Zap,
 } from "lucide-react";
 import type { EngineInfo, Project } from "../types";
-import { LoomLogo } from "./LoomLogo";
-import { StatusBadge } from "./ui/StatusBadge";
 
 interface SidebarProps {
   engines: EngineInfo[];
@@ -25,12 +22,10 @@ interface SidebarProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
   onOpenCmdk: () => void;
-  isRunning: boolean;
   selectedScript: string;
   onSelectScript: (script: string, engine: string) => void;
   projects: Project[];
   activeProjectId: string;
-  onSelectProject: (id: string) => void;
   onOpenNewProject: () => void;
 }
 
@@ -41,16 +36,13 @@ export const Sidebar = ({
   activeTab,
   onSelectTab,
   onOpenCmdk,
-  isRunning,
   selectedScript,
   onSelectScript,
   projects,
   activeProjectId,
-  onSelectProject,
   onOpenNewProject,
 }: SidebarProps) => {
   const [samplesExpanded, setSamplesExpanded] = useState(true);
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
 
   const navSections = [
@@ -73,69 +65,45 @@ export const Sidebar = ({
 
   return (
     <aside className="loom-sidebar" aria-label="Loom workspace navigation">
-      <div className="loom-sidebar__brand">
-        <LoomLogo size={30} showText />
-        {isRunning && <StatusBadge status="running" label="Running" />}
-      </div>
-
-      <section className="loom-sidebar__project" aria-label="Active project">
+      <section className="loom-sidebar__project" aria-label="Project resources">
         <div className="loom-sidebar__project-heading">
-          <span>Active project</span>
-          <button type="button" onClick={onOpenNewProject} className="loom-sidebar__new-project">
+          <span>Projects</span>
+          <button type="button" onClick={onOpenNewProject} className="loom-sidebar__new-project" aria-label="New project">
             <Plus aria-hidden="true" size={14} />
             <span>New</span>
           </button>
         </div>
-
-        <div className="loom-project-switcher">
-          <button
-            type="button"
-            onClick={() => setProjectMenuOpen((open) => !open)}
-            className="loom-project-switcher__trigger"
-            aria-expanded={projectMenuOpen}
-          >
-            <span className="loom-project-switcher__name">
-              <Layers aria-hidden="true" size={16} />
-              <span className="loom-truncate">{activeProject?.name ?? "No project selected"}</span>
-            </span>
-            <ChevronDown aria-hidden="true" size={15} />
-          </button>
-
-          {projectMenuOpen && (
-            <div className="loom-project-switcher__menu" role="menu">
-              {projects.map((project) => {
-                const selected = project.id === activeProject?.id;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected}
-                    onClick={() => {
-                      onSelectProject(project.id);
-                      setProjectMenuOpen(false);
-                    }}
-                    className={`loom-project-switcher__option ${selected ? "loom-project-switcher__option--active" : ""}`}
-                  >
-                    <span className="loom-truncate">{project.name}</span>
-                    <span>{project.suites.length} suites</span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => {
-                  setProjectMenuOpen(false);
-                  onOpenNewProject();
-                }}
-                className="loom-project-switcher__create"
-              >
-                <Plus aria-hidden="true" size={14} />
-                Create new project
-              </button>
+        {activeProject ? (
+          <>
+            <div className="loom-sidebar__project-name" title={activeProject.name}>
+              <FolderOpen aria-hidden="true" size={16} />
+              <span className="loom-truncate">{activeProject.name}</span>
             </div>
-          )}
-        </div>
+            <button type="button" onClick={() => setSamplesExpanded((expanded) => !expanded)}
+              className="loom-sidebar__explorer-heading" aria-expanded={samplesExpanded}>
+              {samplesExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
+              <span>Suites ({activeProject.suites.length})</span>
+            </button>
+            {samplesExpanded && (
+              activeProject.suites.length ? (
+                <div className="loom-sidebar__suite-list">
+                  {activeProject.suites.map((suite) => {
+                    const selected = selectedScript === suite.scriptPath;
+                    return (
+                      <button key={suite.id} type="button"
+                        onClick={() => { onSelectScript(suite.scriptPath, suite.engine); onSelectTab("runner"); }}
+                        className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}>
+                        <span className="loom-sidebar__suite-name"><Zap aria-hidden="true" size={14} />
+                          <span className="loom-truncate">{suite.name}</span></span>
+                        <span className="loom-engine-tag">{suite.engine}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : <p className="loom-sidebar__empty">No suites yet. Open Visual flow or Script editor to create one.</p>
+            )}
+          </>
+        ) : <p className="loom-sidebar__empty">Create a project to organize scenarios and run history.</p>}
       </section>
 
       <nav className="loom-sidebar__nav" aria-label="Primary navigation">
@@ -161,45 +129,7 @@ export const Sidebar = ({
         ))}
       </nav>
 
-      <section className="loom-sidebar__explorer" aria-label="Project suites and engines">
-        <div className="loom-sidebar__explorer-section">
-          <button
-            type="button"
-            onClick={() => setSamplesExpanded((expanded) => !expanded)}
-            className="loom-sidebar__explorer-heading"
-            aria-expanded={samplesExpanded}
-          >
-            {samplesExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
-            <FolderOpen aria-hidden="true" size={16} />
-            <span>Suites ({activeProject?.suites.length ?? 0})</span>
-          </button>
-
-          {samplesExpanded && activeProject && (
-            <div className="loom-sidebar__suite-list">
-              {activeProject.suites.map((suite) => {
-                const selected = selectedScript === suite.scriptPath;
-                return (
-                  <button
-                    key={suite.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectScript(suite.scriptPath, suite.engine);
-                      onSelectTab("runner");
-                    }}
-                    className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}
-                  >
-                    <span className="loom-sidebar__suite-name">
-                      <Zap aria-hidden="true" size={14} />
-                      <span className="loom-truncate">{suite.name}</span>
-                    </span>
-                    <span className="loom-engine-tag">{suite.engine}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
+      <section className="loom-sidebar__explorer" aria-label="Engines and runtime">
         <div className="loom-sidebar__explorer-section">
           <div className="loom-sidebar__engines-heading">
             <span><Cpu aria-hidden="true" size={15} /> Engines</span>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { EngineInfo, Project } from "../types";
@@ -57,12 +57,10 @@ describe("Sidebar", () => {
         activeTab="runner"
         onSelectTab={onSelectTab}
         onOpenCmdk={vi.fn()}
-        isRunning={false}
         selectedScript="examples/locust/basic_test.py"
         onSelectScript={vi.fn()}
         projects={projects}
         activeProjectId="project-1"
-        onSelectProject={vi.fn()}
         onOpenNewProject={vi.fn()}
       />,
     );
@@ -70,5 +68,23 @@ describe("Sidebar", () => {
     expect(screen.getByText(longName)).toHaveClass("loom-truncate");
     await user.click(screen.getByRole("button", { name: "Dashboard" }));
     expect(onSelectTab).toHaveBeenCalledWith("dashboard");
+  });
+
+  it("shows project suites before other navigation and keeps project actions", async () => {
+    const user = userEvent.setup();
+    const onSelectScript = vi.fn();
+    const onOpenNewProject = vi.fn();
+    render(<Sidebar engines={engines} selectedEngineId="locust" onSelectEngine={vi.fn()} activeTab="dashboard"
+      onSelectTab={vi.fn()} onOpenCmdk={vi.fn()} selectedScript="" onSelectScript={onSelectScript}
+      projects={projects} activeProjectId="project-1" onOpenNewProject={onOpenNewProject} />);
+
+    const projectTree = screen.getByRole("region", { name: "Project resources" });
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(projectTree.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(projectTree).getByText(projects[0].name)).toBeVisible();
+    await user.click(within(projectTree).getByRole("button", { name: /checkout-journey/ }));
+    expect(onSelectScript).toHaveBeenCalledWith("examples/locust/basic_test.py", "locust");
+    await user.click(within(projectTree).getByRole("button", { name: "New project" }));
+    expect(onOpenNewProject).toHaveBeenCalledTimes(1);
   });
 });
