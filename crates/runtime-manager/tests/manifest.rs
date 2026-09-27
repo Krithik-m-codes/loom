@@ -61,6 +61,26 @@ fn unsupported_architectures_fail_explicitly() {
 }
 
 #[test]
+fn platform_support_predicate_matches_all_artifact_lookups() {
+    for os in [Os::Windows, Os::MacOs, Os::Linux, Os::Other] {
+        for arch in [Arch::X64, Arch::Arm64, Arch::Other] {
+            let platform = PlatformKey::new(os, arch);
+            for artifact in [
+                ArtifactId::UvBootstrap,
+                ArtifactId::RustupBootstrap,
+                ArtifactId::K6,
+            ] {
+                assert_eq!(
+                    platform.is_supported(),
+                    RuntimeManifest::artifact(artifact, platform).is_ok(),
+                    "support predicate disagrees for {artifact:?} on {platform:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn component_pins_are_specific_versions() {
     let locust = RuntimeManifest::locust();
     assert!(locust.python_version.starts_with("3."));
@@ -80,11 +100,40 @@ fn component_pins_are_specific_versions() {
 
 #[test]
 fn install_state_can_cross_the_tauri_json_boundary() {
-    let state = InstallState::Ready {
-        version: "2.3.0".into(),
-        path: "runtimes/k6/2.3.0/k6".into(),
-    };
-    let json = serde_json::to_string(&state).unwrap();
-    assert_eq!(serde_json::from_str::<InstallState>(&json).unwrap(), state);
+    let states = [
+        (
+            InstallState::Missing,
+            serde_json::json!({ "status": "missing" }),
+        ),
+        (
+            InstallState::Installing {
+                stage: "download".into(),
+            },
+            serde_json::json!({ "status": "installing", "stage": "download" }),
+        ),
+        (
+            InstallState::Ready {
+                version: "2.3.0".into(),
+                path: "runtimes/k6/2.3.0/k6".into(),
+            },
+            serde_json::json!({ "status": "ready", "version": "2.3.0", "path": "runtimes/k6/2.3.0/k6" }),
+        ),
+        (
+            InstallState::Failed {
+                stage: "verify".into(),
+                message: "checksum mismatch".into(),
+            },
+            serde_json::json!({ "status": "failed", "stage": "verify", "message": "checksum mismatch" }),
+        ),
+    ];
+
+    for (state, expected_json) in states {
+        let value = serde_json::to_value(&state).unwrap();
+        assert_eq!(value, expected_json);
+        assert_eq!(
+            serde_json::from_value::<InstallState>(value).unwrap(),
+            state
+        );
+    }
     assert_eq!(serde_json::to_string(&RuntimeId::K6).unwrap(), "\"k6\"");
 }
