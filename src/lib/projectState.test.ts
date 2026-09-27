@@ -95,4 +95,24 @@ describe("saved project initialization", () => {
     expect(config.script_path).toBe("");
     expect(config.target.host).toBe("https://api.example.test");
   });
+
+  it("uses the suite engine and script path over conflicting saved config metadata", () => {
+    const conflictingProject: Project = {
+      ...userProject,
+      suites: [{
+        ...userProject.suites[0],
+        config: { ...userProject.suites[0].config, engine: "locust", script_path: "tests/wrong.py" },
+      }],
+    };
+
+    expect(projectConfigForSelection([conflictingProject], conflictingProject.id)).toEqual({
+      project_name: "Customer workspace",
+      engine: "k6",
+      script_path: "tests/smoke.js",
+      load_profile: { users: 4, spawn_rate: 1, duration: "30s" },
+      target: { host: "https://api.example.test", headers: { Authorization: "env:API_TOKEN" } },
+    });
+    expect(conflictingProject.suites[0].config.engine).toBe("locust");
+    expect(conflictingProject.suites[0].config.script_path).toBe("tests/wrong.py");
+  });
 });

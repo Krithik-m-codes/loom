@@ -21,7 +21,7 @@ import {
   subscribeToRunFinished,
 } from "./lib/ipc";
 import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig } from "./types";
-import { loadProjectState, projectConfigForSelection } from "./lib/projectState";
+import { configForSuite, loadProjectState, projectConfigForSelection } from "./lib/projectState";
 
 export default function App() {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
@@ -79,6 +79,7 @@ export default function App() {
       setEngines(list);
       if (list.length > 0 && !activeProjectId && !list.find((e) => e.id === selectedEngineId)) {
         setSelectedEngineId(list[0].id);
+        setConfig((prev) => ({ ...prev, engine: list[0].id }));
       }
     } catch (err) {
       console.error("Failed to list engines:", err);
@@ -141,8 +142,9 @@ export default function App() {
     try {
       localStorage.setItem("loom_active_project_id", projectId);
     } catch {}
-    setSelectedEngineId(proj.suites[0]?.engine ?? proj.defaultEngine);
-    setConfig(projectConfigForSelection(projects, projectId));
+    const nextConfig = projectConfigForSelection(projects, projectId);
+    setSelectedEngineId(nextConfig.engine);
+    setConfig(nextConfig);
   };
 
   const handleCreateProject = (newProj: Project) => {
@@ -155,33 +157,30 @@ export default function App() {
       localStorage.setItem("loom_projects", JSON.stringify(updatedStored));
       localStorage.setItem("loom_active_project_id", newProj.id);
     } catch {}
-    setSelectedEngineId(newProj.suites[0]?.engine ?? newProj.defaultEngine);
-    setConfig(projectConfigForSelection(updated, newProj.id));
+    const nextConfig = projectConfigForSelection(updated, newProj.id);
+    setSelectedEngineId(nextConfig.engine);
+    setConfig(nextConfig);
     setIsNewProjectOpen(false);
   };
 
   const handleSelectEngine = (engineId: string) => {
     setSelectedEngineId(engineId);
-    const suite = projects.find((project) => project.id === activeProjectId)?.suites.find((entry) => entry.engine === engineId);
-    setConfig((prev) => ({
-      ...prev,
-      engine: engineId,
-      script_path: suite?.scriptPath ?? "",
-    }));
+    setConfig(projectConfigForSelection(projects, activeProjectId, engineId));
   };
 
   const handleSelectScript = (path: string, engine: string) => {
     setSelectedEngineId(engine);
-    setConfig((prev) => ({
+    const suite = projects.find((project) => project.id === activeProjectId)?.suites.find((entry) => entry.engine === engine && entry.scriptPath === path);
+    setConfig((prev) => suite ? configForSuite(suite) : {
       ...prev,
       engine,
       script_path: path,
-    }));
+    });
   };
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const canRun = Boolean(
-    activeProject && config.script_path.trim() && config.target.host.trim() &&
+    activeProject && config.engine === selectedEngineId && config.script_path.trim() && config.target.host.trim() &&
     engines.some((engine) => engine.id === selectedEngineId && "Ready" in engine.availability),
   );
 
@@ -195,11 +194,7 @@ export default function App() {
     setIsRunning(true);
 
     try {
-      const fullConfig = {
-        ...config,
-        engine: selectedEngineId,
-      };
-      const runId = await startRun(selectedEngineId, fullConfig);
+      const runId = await startRun(selectedEngineId, config);
       setActiveRunId(runId);
     } catch (err: any) {
       console.error("Run error:", err);

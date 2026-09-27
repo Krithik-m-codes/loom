@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Project } from "./types";
-import { listEngines } from "./lib/ipc";
+import { getRunHistory, listEngines } from "./lib/ipc";
 
 const { startRun } = vi.hoisted(() => ({ startRun: vi.fn() }));
 vi.mock("./lib/ipc", () => ({
@@ -36,6 +36,8 @@ beforeEach(() => {
   localStorage.setItem("loom_onboarding_completed", "true");
   startRun.mockReset();
   vi.mocked(listEngines).mockClear();
+  vi.mocked(getRunHistory).mockReset();
+  vi.mocked(getRunHistory).mockResolvedValue([]);
   vi.mocked(listEngines).mockResolvedValue([
     { id: "locust", display_name: "Locust", engine_language: "Python", license: "MIT", license_tier: "Core", supported_script_languages: ["Python"], availability: { Ready: {} } },
     { id: "k6", display_name: "k6", engine_language: "JavaScript", license: "AGPL-3.0", license_tier: "Plugin", supported_script_languages: ["JavaScript"], availability: { Ready: {} } },
@@ -88,6 +90,72 @@ describe("project startup and run gating", () => {
 
     await user.click(screen.getByRole("button", { name: "Run Test" }));
     await waitFor(() => expect(startRun).toHaveBeenCalledWith("k6", expect.objectContaining({ engine: "k6", script_path: "tests/smoke.js" })));
+  });
+
+  it("runs a selected k6 suite with its own target, headers, and profile", async () => {
+    const user = userEvent.setup();
+    const twoSuiteProject: Project = {
+      ...configuredProject,
+      suites: [
+        { ...configuredProject.suites[0], config: { ...configuredProject.suites[0].config, load_profile: { users: 2, spawn_rate: 1, duration: "20s" }, target: { host: "https://locust.test", headers: { "X-Locust": "yes" } } } },
+        { id: "suite-k6", name: "K6 Scenario", engine: "k6", scriptPath: "tests/k6.js",
+          config: { project_name: "Configured Project", engine: "locust", script_path: "tests/wrong.py", load_profile: { users: 42, spawn_rate: 7, duration: "3m" }, target: { host: "https://k6.test", headers: { "X-K6": "yes" } } } },
+      ],
+    };
+    localStorage.setItem("loom_projects", JSON.stringify([twoSuiteProject]));
+    localStorage.setItem("loom_active_project_id", twoSuiteProject.id);
+    startRun.mockResolvedValue("run-k6");
+    render(<App />);
+
+    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://locust.test");
+    await user.click(screen.getByRole("button", { name: /K6 Scenario/ }));
+    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test");
+    await user.click(screen.getAllByRole("button", { name: "Run Test" })[0]);
+
+    await waitFor(() => expect(startRun).toHaveBeenCalledExactlyOnceWith("k6", {
+      project_name: "Configured Project",
+      engine: "k6",
+      script_path: "tests/k6.js",
+      load_profile: { users: 42, spawn_rate: 7, duration: "3m" },
+      target: { host: "https://k6.test", headers: { "X-K6": "yes" } },
+    }));
+  });
+
+  it("loads the matching suite's complete config when switching engines", async () => {
+    const user = userEvent.setup();
+    const k6Suite = { id: "suite-k6", name: "K6 Scenario", engine: "k6", scriptPath: "tests/k6.js",
+      config: { project_name: "Configured Project", engine: "k6", script_path: "tests/k6.js", load_profile: { users: 32, spawn_rate: 4, duration: "2m" }, target: { host: "https://k6.test", headers: { "X-K6": "yes" } } } };
+    localStorage.setItem("loom_projects", JSON.stringify([{ ...configuredProject, suites: [configuredProject.suites[0], k6Suite] }]));
+    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    startRun.mockResolvedValue("run-k6");
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /k6.*Plugin/i }));
+    expect(screen.getByRole("textbox", { name: "Target host" })).toHaveValue("https://k6.test");
+    await user.click(screen.getByRole("button", { name: "Run Test" }));
+    await waitFor(() => expect(startRun).toHaveBeenCalledExactlyOnceWith("k6", {
+      project_name: "Configured Project", engine: "k6", script_path: "tests/k6.js",
+      load_profile: { users: 32, spawn_rate: 4, duration: "2m" },
+      target: { host: "https://k6.test", headers: { "X-K6": "yes" } },
+    }));
+  });
+
+  it("blocks a history run whose selected engine conflicts with its config", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("loom_projects", JSON.stringify([configuredProject]));
+    localStorage.setItem("loom_active_project_id", configuredProject.id);
+    vi.mocked(getRunHistory).mockResolvedValue([{
+      id: "run-mismatch", engine: "k6", project: "Configured Project",
+      config: JSON.stringify(configuredProject.suites[0].config),
+      started_at: "2026-01-01T00:00:00.000Z", status: "finished",
+    }]);
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "History" }));
+    await user.click(await screen.findByRole("button", { name: "Re-run" }));
+    expect(screen.getAllByRole("button", { name: "Run Test" })[0]).toBeDisabled();
+    await user.click(screen.getAllByRole("button", { name: "Run Test" })[0]);
+    expect(startRun).not.toHaveBeenCalled();
   });
 
   it("keeps unknown saved records after migrating demos and creating a project", async () => {
