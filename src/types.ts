@@ -113,6 +113,7 @@ export interface TestSuite {
   engine: string;
   scriptPath: string;
   config: TestConfig;
+  updatedAt?: string;
 }
 
 export interface Project {
@@ -122,5 +123,12 @@ export interface Project {
   targetHost: string;
   defaultEngine: string;
   createdAt: string;
+  updatedAt?: string;
   suites: TestSuite[];
+}
+
+export interface SuiteWithContent extends TestSuite {
+  projectId: string;
+  scriptContent: string;
+  visualNodes?: unknown;
 }
