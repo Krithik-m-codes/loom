@@ -368,7 +368,7 @@ export default function App() {
   const selectedEngineName = selectedEngineObj?.display_name || selectedEngineId;
 
   return (
-    <div className="flex h-full w-full bg-[#0A0A0B] text-[#E8E9EB] font-sans antialiased overflow-hidden select-none">
+    <div className="loom-app-shell select-none">
       {/* 1. Bruno + Kubus Sidebar */}
       <Sidebar
         engines={engines}

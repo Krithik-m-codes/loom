@@ -251,10 +251,45 @@
 }
 
 .loom-app-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
   min-width: 900px;
-  min-height: 100%;
+  overflow: hidden;
   background: var(--loom-bg);
   color: var(--loom-text);
+}
+
+.loom-logo {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.loom-logo__mark {
+  display: block;
+  object-fit: contain;
+}
+
+.loom-logo__lockup {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+  line-height: 1;
+}
+
+.loom-logo__wordmark {
+  color: var(--loom-text);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.loom-logo__descriptor {
+  color: var(--loom-text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 
 .loom-page {
