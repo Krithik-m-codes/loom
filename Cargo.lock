@@ -2830,6 +2830,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "runtime-manager"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
