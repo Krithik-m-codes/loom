@@ -1097,6 +1097,88 @@ git commit -m "test: expand coverage for sqlite projects, editor, templates"
 
 ---
 
+### Task 12: Kubus-inspired app shell — guided flow, notifications, issues widget, bottom dock, run-details drawer
+
+**Files:**
+- Create: `src/components/ui/Toast.tsx`, `src/components/ui/Toast.test.tsx`
+- Create: `src/components/dashboard/AttentionNeeded.tsx`, `src/components/dashboard/AttentionNeeded.test.tsx`
+- Create: `src/components/dashboard/ProjectCards.tsx`, `src/components/dashboard/ProjectCards.test.tsx`
+- Create: `src/components/dock/LogDock.tsx`, `src/components/dock/LogDock.test.tsx`
+- Create: `src/components/RunDetailsDrawer.tsx`, `src/components/RunDetailsDrawer.test.tsx`
+- Modify: `src/App.tsx` (ToastProvider, LogDock, guided-flow state)
+- Modify: `src/components/DashboardView.tsx` (checklist + widgets wiring)
+- Modify: `src/components/HistoryView.tsx` (open drawer on row click)
+- Modify: `src/components/Sidebar.tsx` (filter box + suite Run shortcut)
+- Modify: `src/components/CommandPaletteModal.tsx` (project/suite commands)
+- Modify: `src/index.css` (dock/drawer/toast styles, `loom-*` naming)
+
+**Interfaces:**
+- Consumes: `engines`, `projects` with `suites` (Tasks 4/9), `getRunHistory`, App `logs`/`onClearLogs`, existing `onRunTest`.
+- Produces: `ToastProvider` + `useToast()` (`pushToast(message, kind)`); `AttentionNeeded` props `{ engines, suites, recentRuns, onNavigate }`; `ProjectCards` props `{ projects, onSelectProject }`; `LogDock` props `{ logs, isRunning, onClearLogs }`; `RunDetailsDrawer` props `{ run: RunRecord | null, onClose, onRerun }`.
+- The Runner's logs tab stays; the dock is additive. Theme toggle, saved presets, drawer back-stack are non-goals.
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests** — create all five test files:
+  - `Toast.test.tsx`: provider renders; `pushToast("Saved", "success")` shows the message; `kind: "error"` renders error styling; dismiss button removes it.
+  - `AttentionNeeded.test.tsx`: with `engines=[k6 NotInstalled]`, `suites=[{empty target host}]`, `recentRuns=[one failed]` → three rows with labels and `onNavigate` called with `"engines"` / `"editor"` / `"history"` on click; empty inputs → "All clear" state.
+  - `ProjectCards.test.tsx`: renders suite count, run count, last-run status badge per project; click calls `onSelectProject(id)`.
+  - `LogDock.test.tsx`: collapsed by default (toggle button visible); click toggle → log lines render; Clear button calls `onClearLogs`.
+  - `RunDetailsDrawer.test.tsx`: `run={null}` renders nothing; with a run → Summary tab (status/engine/started/finished) and Config tab (raw config JSON); clicking Config switches tabs.
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `pnpm vitest run src/components/ui/Toast.test.tsx src/components/dashboard/AttentionNeeded.test.tsx src/components/dashboard/ProjectCards.test.tsx src/components/dock/LogDock.test.tsx src/components/RunDetailsDrawer.test.tsx`
+Expected: FAIL — modules not found.
+
+- [ ] **Step 3: Implement Toast + AttentionNeeded + ProjectCards**
+
+`Toast.tsx`: `ToastProvider` (React context, `{ toasts, pushToast, dismissToast }`), `ToastStack` fixed top-right, auto-dismiss 5s except `kind: "error"` (sticky). `useToast()` hook throws outside provider.
+
+`AttentionNeeded.tsx`: builds issue list — every engine with `NotInstalled` availability → `{ label: "<name> not installed", target: "engines" }`; every suite with blank `config.target.host` → `{ label: "Suite '<name>' has no target", target: "editor" }`; every `recentRuns` with `status === "failed"` → `{ label: "Run <id.slice(0,8)> failed", target: "history" }`. Rows are buttons calling `onNavigate(target)`.
+
+`ProjectCards.tsx`: per project — name, `suites.length`, run count via optional `runCounts: Record<string, number>` prop (default `{}`), last status via optional `lastStatus: Record<string, string>` prop, engine-readiness dot from `engines` + `defaultEngine`. Click → `onSelectProject(id)`.
+
+- [ ] **Step 4: Implement LogDock + App wiring**
+
+`LogDock.tsx`: fixed bottom dock, `open` state (default closed; auto-opens on first log while `isRunning`), height state (default 220, drag handle via pointer events, clamp 120–60vh), tabs: single "Run logs" tab + count badge, Clear button, auto-scroll to bottom on new logs. Closed → slim toggle bar.
+
+`App.tsx`: wrap tree in `ToastProvider`; render `LogDock` with `logs`/`isRunning`/`onClearLogs`; replace `console.error` in `handleRunTest` catch and save handlers with `pushToast(message, "error")`; success paths (`handleCreateProject`, suite save) push success toasts.
+
+- [ ] **Step 5: Implement RunDetailsDrawer + History/Sidebar/Palette/CSS**
+
+`RunDetailsDrawer.tsx`: fixed right slide-over, `run === null` → `null`; tabs Summary (status/engine/project/started/finished) + Config (`<pre>` of formatted `run.config`, fallback `"No config recorded"` on parse failure); Re-run button calls `onRerun(run.engine, run.config)`; Close button + Escape key.
+
+`HistoryView.tsx`: add optional `onOpenRun(run)` prop; row click (or View button if rows already have actions — read current file first) opens drawer; `App` holds `detailsRun` state and renders drawer.
+
+`Sidebar.tsx`: filter input above suite list (filters by suite name, case-insensitive); suite rows gain a Run icon-button calling a new optional `onRunSuite(scriptPath, engine)` prop wired to the existing run handler in App.
+
+`CommandPaletteModal.tsx`: add commands "New suite from template", "Go to project: <name>" per project, "Open suite: <name>" per suite — extend props with `projects`, `onOpenNewSuite`, suite-open callback; read current file first for its command shape.
+
+`src/index.css`: `loom-toast*`, `loom-dock*`, `loom-drawer*`, `loom-issues*`, `loom-quickstart*` classes following existing token variables.
+
+`DashboardView.tsx`: render QuickstartChecklist (5 steps: done/active/todo derived from `hasProject = projects.length > 0`, `hasSuite`, `hasRun = recentRuns.length > 0`), `AttentionNeeded`, `ProjectCards` above the existing recent-runs panel; empty projects → numbered "1. Create your first project" CTA button calling existing new-project opener (add optional `onOpenNewProject` prop).
+
+- [ ] **Step 6: Run tests + typecheck**
+
+Run: `pnpm vitest run src/components/ui/Toast.test.tsx src/components/dashboard/AttentionNeeded.test.tsx src/components/dashboard/ProjectCards.test.tsx src/components/dock/LogDock.test.tsx src/components/RunDetailsDrawer.test.tsx`
+Expected: PASS.
+
+Run: `pnpm test`
+Expected: PASS (full suite green).
+
+Run: `pnpm exec tsc --noEmit`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git status --short
+git add <only the files this task created or modified>
+git commit -m "feat: kubus-inspired shell with guided flow, dock, and issues"
+```
+
+---
+
 ## Self-Review
 
 **1. Spec coverage:** §1 SQLite schema → Task 1 DDL + Task 2 IPC. §2 ten IPC commands → Task 2 (all named). §3 frontend arch + mock removal → Tasks 3, 4, 10. §4 Monaco → Task 5. §5 EditorView tabs → Task 6. §6 templates → Task 8. §7 project/suite UI → Task 9. §8 demo removal → Tasks 3, 10. §9 visual builder props → Task 7. §10 testing → Tasks 1–11 each carry tests. §11 acceptance criteria → Task 11 E2E. Non-goals (code→visual parsing, git, sync) are excluded.
