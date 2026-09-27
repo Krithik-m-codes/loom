@@ -70,14 +70,14 @@ const nodeDetails: Record<Exclude<FlowNode["type"], "start">, { label: string; d
 };
 
 export const FlowchartBuilderView = ({ onExportToRunner, targetHost, suiteId, initialNodes: initialNodesProp, onSaveVisualFlow }: FlowchartBuilderViewProps) => {
-  const [nodes, setNodes] = useState<FlowNode[]>(initialNodesProp ?? initialNodes);
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodesProp && initialNodesProp.length > 0 ? initialNodesProp : initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState("node-2");
   const [previewLanguage, setPreviewLanguage] = useState<"locust" | "k6">("locust");
   const [copiedScript, setCopiedScript] = useState(false);
-  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0] ?? initialNodes[0];
 
   useEffect(() => {
-    setNodes(initialNodesProp ?? initialNodes);
+    setNodes(initialNodesProp && initialNodesProp.length > 0 ? initialNodesProp : initialNodes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suiteId]);
 
@@ -97,7 +97,7 @@ export const FlowchartBuilderView = ({ onExportToRunner, targetHost, suiteId, in
   const deleteNode = (id: string) => {
     if (nodes.length <= 1) return;
     setNodes((current) => current.filter((node) => node.id !== id));
-    if (selectedNodeId === id) setSelectedNodeId(nodes[0].id);
+    if (selectedNodeId === id) setSelectedNodeId((nodes[0] ?? initialNodes[0]).id);
   };
 
   const updateNodeProperty = (key: keyof FlowNode, value: FlowNode[keyof FlowNode]) => {

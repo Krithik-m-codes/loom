@@ -74,4 +74,9 @@ describe("FlowchartBuilderView", () => {
     fireEvent.click(screen.getByRole("button", { name: /save flow/i }));
     expect(onSave).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back to default nodes when initial nodes are empty", () => {
+    render(<FlowchartBuilderView targetHost="http://x" onExportToRunner={() => {}} initialNodes={[]} />);
+    expect(screen.getByText("Test Entrypoint (Load Profile)")).toBeTruthy();
+  });
 });
