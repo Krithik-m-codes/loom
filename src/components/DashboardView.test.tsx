@@ -52,4 +52,9 @@ describe("DashboardView", () => {
     rerender(<DashboardView {...props} refreshRevision={1} />);
     expect(await screen.findByText("Billing")).toBeVisible();
   });
+
+  it("shows engine readiness from props without simulated telemetry", async () => {
+    render(<DashboardView engines={[]} onNavigate={() => {}} onSelectEngine={() => {}} targetHost="" onRerun={() => {}} />);
+    expect(screen.getByText(/no engines detected/i)).toBeTruthy();
+  });
 });

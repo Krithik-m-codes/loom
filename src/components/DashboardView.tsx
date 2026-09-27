@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
-  Cpu,
   FileCode2,
   Globe,
   Play,
   Radio,
   RefreshCw,
-  Server,
   TrendingUp,
   Workflow,
   Zap,
@@ -33,8 +31,6 @@ export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSele
   const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const requestSequence = useRef(0);
-  const [cpuUsage, setCpuUsage] = useState(22);
-  const [memUsage, setMemUsage] = useState(41);
 
   const loadRecentRuns = async () => {
     const request = ++requestSequence.current;
@@ -53,14 +49,6 @@ export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSele
     void loadRecentRuns();
     return () => { requestSequence.current += 1; };
   }, [refreshRevision]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuUsage((previous) => Math.min(85, Math.max(15, previous + (Math.random() * 6 - 3))));
-      setMemUsage((previous) => Math.min(75, Math.max(30, previous + (Math.random() * 2 - 1))));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   const readyEnginesCount = engines.filter((engine) => "Ready" in engine.availability).length;
   const runningRuns = recentRuns.filter((run) => run.status === "running").length;
@@ -91,23 +79,22 @@ export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSele
       <section className="loom-dashboard__resources" aria-label="Local system resources">
         <Panel title="Local execution health" className="loom-dashboard__resource-panel">
           <div className="loom-resource-grid">
-            <div className="loom-resource-meter">
-              <div><span><Cpu aria-hidden="true" size={16} /> Host CPU</span><strong>{Math.round(cpuUsage)}%</strong></div>
-              <span className="loom-resource-meter__track"><span className="loom-resource-meter__fill" style={{ width: `${Math.min(100, cpuUsage)}%` }} /></span>
-              <small>Subprocess isolation remains optimized.</small>
-            </div>
-            <div className="loom-resource-meter">
-              <div><span><Server aria-hidden="true" size={16} /> System memory</span><strong>{Math.round(memUsage)}%</strong></div>
-              <span className="loom-resource-meter__track"><span className="loom-resource-meter__fill loom-resource-meter__fill--info" style={{ width: `${Math.min(100, memUsage)}%` }} /></span>
-              <small>Local SQLite buffer is clean.</small>
-            </div>
             <div className="loom-resource-summary">
               <span>Engines ready</span>
               <strong>{readyEnginesCount} / {engines.length}</strong>
               <small>Detected on your local PATH.</small>
             </div>
+            <div className="loom-resource-summary">
+              <span>Recent runs</span>
+              <strong>{recentRuns.length}</strong>
+              <small>Stored in the local run history.</small>
+            </div>
+            <div className="loom-resource-summary">
+              <span>Local SQLite buffer</span>
+              <strong>Ready</strong>
+              <small>Run records persist on this machine.</small>
+            </div>
           </div>
-          <div className="loom-data-wave" aria-hidden="true" />
         </Panel>
       </section>
 
