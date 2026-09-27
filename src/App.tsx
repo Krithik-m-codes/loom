@@ -4,7 +4,7 @@ import { TopNav } from "./components/TopNav";
 import { DashboardView } from "./components/DashboardView";
 import { FlowchartBuilderView } from "./components/FlowchartBuilderView";
 import { RunnerView } from "./components/RunnerView";
-import { ScriptEditorView } from "./components/ScriptEditorView";
+import { EditorView } from "./components/EditorView";
 import { HistoryView } from "./components/HistoryView";
 import { EnginesView } from "./components/EnginesView";
 import { CommandPaletteModal } from "./components/CommandPaletteModal";
@@ -95,8 +95,6 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [activeSuiteId, setActiveSuiteId] = useState<string | null>(null);
-  // Suite selection source of truth for later tasks (Editor, modals, shell); read there.
-  void activeSuiteId;
 
   // Professional Onboarding Wizard state
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
@@ -457,12 +455,26 @@ export default function App() {
           {openTabs.includes("editor") && (
             <div id="workspace-panel-editor" role="tabpanel" aria-labelledby="workspace-tab-editor"
               className="loom-workspace__panel" hidden={activeTab !== "editor"}>
-              <ScriptEditorView
+              <EditorView
+                suiteId={activeSuiteId}
                 scriptPath={config.script_path}
-                onSelectScript={handleSelectScript}
+                engine={selectedEngineId}
+                targetHost={config.target.host}
+                config={config}
                 onRunTest={() => {
                   openWorkspaceTab("runner");
                   handleRunTest();
+                }}
+                onSuiteSaved={(suite) => {
+                  setProjects((prev) =>
+                    prev.map((project) => ({
+                      ...project,
+                      suites: project.suites.map((entry) =>
+                        entry.id === suite.id ? { ...entry, ...suite } : entry,
+                      ),
+                    })),
+                  );
+                  setConfig(configForSuite(suite));
                 }}
               />
             </div>
