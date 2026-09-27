@@ -7,6 +7,7 @@ import {
   FolderOpen,
   History,
   LayoutDashboard,
+  Play,
   Plus,
   Settings,
   Terminal,
@@ -28,6 +29,7 @@ interface SidebarProps {
   activeProjectId: string;
   onOpenNewProject: () => void;
   onOpenNewSuite?: () => void;
+  onRunSuite?: (scriptPath: string, engine: string) => void;
 }
 
 export const Sidebar = ({
@@ -43,9 +45,14 @@ export const Sidebar = ({
   activeProjectId,
   onOpenNewProject,
   onOpenNewSuite,
+  onRunSuite,
 }: SidebarProps) => {
   const [samplesExpanded, setSamplesExpanded] = useState(true);
+  const [suiteFilter, setSuiteFilter] = useState("");
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
+  const visibleSuites = (activeProject?.suites ?? []).filter((suite) =>
+    suite.name.toLowerCase().includes(suiteFilter.toLowerCase()),
+  );
 
   const navSections = [
     { label: "Platform", items: [{ id: "dashboard", label: "Dashboard", Icon: LayoutDashboard }] },
@@ -88,21 +95,44 @@ export const Sidebar = ({
             </button>
             {samplesExpanded && (
               activeProject.suites.length ? (
-                <div className="loom-sidebar__suite-list">
-                  {activeProject.suites.map((suite) => {
-                    const selected = selectedScript === suite.scriptPath;
-                    return (
-                      <button key={suite.id} type="button"
-                        onClick={() => { onSelectScript(suite.scriptPath, suite.engine); onSelectTab("editor"); }}
-                        className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}>
-                        <span className="loom-sidebar__suite-name"><Zap aria-hidden="true" size={14} />
-                          <span className="loom-truncate">{suite.name}</span></span>
-                        <span className="loom-engine-tag">{suite.engine}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : <p className="loom-sidebar__empty">No suites yet. Open Visual flow or Script editor to create one.</p>
+                <>
+                  <input
+                    type="search"
+                    aria-label="Filter suites"
+                    placeholder="Filter suites…"
+                    value={suiteFilter}
+                    onChange={(event) => setSuiteFilter(event.target.value)}
+                    className="loom-input loom-sidebar__filter"
+                  />
+                  {visibleSuites.length ? (
+                    <div className="loom-sidebar__suite-list">
+                      {visibleSuites.map((suite) => {
+                        const selected = selectedScript === suite.scriptPath;
+                        return (
+                          <div key={suite.id} className={`loom-sidebar__suite-row ${selected ? "loom-sidebar__suite-row--active" : ""}`}>
+                            <button type="button"
+                              onClick={() => { onSelectScript(suite.scriptPath, suite.engine); onSelectTab("editor"); }}
+                              className={`loom-sidebar__suite ${selected ? "loom-sidebar__suite--active" : ""}`}>
+                              <span className="loom-sidebar__suite-name"><Zap aria-hidden="true" size={14} />
+                                <span className="loom-truncate">{suite.name}</span></span>
+                              <span className="loom-engine-tag">{suite.engine}</span>
+                            </button>
+                            {onRunSuite && (
+                              <button type="button"
+                                onClick={() => onRunSuite(suite.scriptPath, suite.engine)}
+                                className="loom-sidebar__suite-run"
+                                aria-label="Run suite"
+                                title={`Run ${suite.name}`}>
+                                <Play aria-hidden="true" size={14} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="loom-sidebar__empty">No suites match &ldquo;{suiteFilter}&rdquo;.</p>}
+                </>
+              ) : <p className="loom-sidebar__empty">No suites yet. Step 2: Create a suite from a template to begin.</p>
             )}
             <button type="button" onClick={() => onOpenNewSuite?.()} className="loom-sidebar__new-suite" aria-label="New suite">
               <Plus aria-hidden="true" size={14} />

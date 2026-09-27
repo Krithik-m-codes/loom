@@ -10,6 +10,7 @@ import { StatusBadge, type LoomStatus } from "./ui/StatusBadge";
 interface HistoryViewProps {
   onRerun: (engine: string, config: string) => void;
   refreshRevision?: number;
+  onOpenRun?: (run: RunRecord) => void;
 }
 
 const toStatusBadge = (status: RunRecord["status"]): LoomStatus => {
@@ -19,7 +20,7 @@ const toStatusBadge = (status: RunRecord["status"]): LoomStatus => {
   return "failed";
 };
 
-export const HistoryView: React.FC<HistoryViewProps> = ({ onRerun, refreshRevision = 0 }) => {
+export const HistoryView: React.FC<HistoryViewProps> = ({ onRerun, refreshRevision = 0, onOpenRun }) => {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -70,19 +71,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onRerun, refreshRevisi
             <div className="loom-empty-state">
               <p className="loom-empty-state__title">No local run history</p>
               <p className="loom-empty-state__description">No historical runs found in database.</p>
+              <p className="loom-empty-state__description">Step 4: Run a test to populate local history.</p>
             </div>
           ) : (
             <table className="loom-table">
               <thead><tr><th>Status</th><th>Run ID</th><th>Engine</th><th>Project</th><th>Started</th><th>Finished</th><th className="loom-table__numeric">Action</th></tr></thead>
               <tbody>{filteredRuns.map((run) => (
-                <tr key={run.id}>
+                <tr key={run.id} onClick={() => onOpenRun?.(run)} className={onOpenRun ? "loom-table__row--clickable" : undefined}>
                   <td><StatusBadge status={toStatusBadge(run.status)} label={run.status} /></td>
                   <td className="loom-mono">{run.id.substring(0, 8)}…</td>
                   <td>{run.engine}</td>
                   <td>{run.project}</td>
                   <td>{new Date(run.started_at).toLocaleString()}</td>
                   <td>{run.finished_at ? new Date(run.finished_at).toLocaleTimeString() : "-"}</td>
-                  <td className="loom-table__numeric"><LoomButton variant="ghost" onClick={() => onRerun(run.engine, run.config)}><Play aria-hidden="true" size={14} /> Re-run</LoomButton></td>
+                  <td className="loom-table__numeric"><LoomButton variant="ghost" onClick={(event) => { event.stopPropagation(); onRerun(run.engine, run.config); }}><Play aria-hidden="true" size={14} /> Re-run</LoomButton></td>
                 </tr>
               ))}</tbody>
             </table>

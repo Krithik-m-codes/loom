@@ -2,21 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
+  Check,
   FileCode2,
   Globe,
   Play,
+  Plus,
   Radio,
   RefreshCw,
   TrendingUp,
   Workflow,
   Zap,
 } from "lucide-react";
-import type { EngineInfo, RunRecord } from "../types";
+import type { EngineInfo, Project, RunRecord } from "../types";
 import { getRunHistory } from "../lib/ipc";
 import { LoomButton } from "./ui/LoomButton";
 import { MetricCard } from "./ui/MetricCard";
 import { Panel, SectionHeader } from "./ui/Panel";
 import { StatusBadge } from "./ui/StatusBadge";
+import { AttentionNeeded } from "./dashboard/AttentionNeeded";
+import { ProjectCards } from "./dashboard/ProjectCards";
 
 interface DashboardViewProps {
   engines: EngineInfo[];
@@ -25,9 +29,12 @@ interface DashboardViewProps {
   onSelectEngine: (id: string) => void;
   targetHost: string;
   onRerun: (engine: string, config: string) => void;
+  projects?: Project[];
+  onOpenNewProject?: () => void;
+  onSelectProject?: (id: string) => void;
 }
 
-export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSelectEngine, targetHost, onRerun }: DashboardViewProps) => {
+export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSelectEngine, targetHost, onRerun, projects = [], onOpenNewProject, onSelectProject }: DashboardViewProps) => {
   const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const requestSequence = useRef(0);
@@ -53,6 +60,28 @@ export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSele
   const readyEnginesCount = engines.filter((engine) => "Ready" in engine.availability).length;
   const runningRuns = recentRuns.filter((run) => run.status === "running").length;
 
+  const allSuites = projects.flatMap((project) => project.suites);
+  const hasProject = projects.length > 0;
+  const hasSuite = allSuites.length > 0;
+  const hasRun = recentRuns.length > 0;
+
+  const quickstartSteps = [
+    { label: "Select a project", hint: "Create or select a project to hold suites and history.", done: hasProject },
+    { label: "Create a suite from a template", hint: "Add a Locust, k6, or Goose suite to the project.", done: hasSuite },
+    { label: "Edit the script", hint: "Tailor requests, ramps, think time, and assertions.", done: hasSuite },
+    { label: "Run the test", hint: "Launch the suite from the runner and watch live telemetry.", done: hasRun },
+    { label: "Analyze results", hint: "Inspect metrics, logs, and history to compare runs.", done: hasRun },
+  ];
+
+  const runCounts: Record<string, number> = {};
+  const lastStatus: Record<string, string> = {};
+  for (const run of recentRuns) {
+    const project = projects.find((entry) => entry.name === run.project);
+    if (!project) continue;
+    runCounts[project.id] = (runCounts[project.id] ?? 0) + 1;
+    lastStatus[project.id] ??= run.status;
+  }
+
   return (
     <main className="loom-page loom-dashboard">
       <header className="loom-dashboard__header">
@@ -68,6 +97,46 @@ export const DashboardView = ({ engines, refreshRevision = 0, onNavigate, onSele
           <LoomButton onClick={() => onNavigate("flowchart")}><Workflow aria-hidden="true" size={16} /> Design Visual Flow</LoomButton>
         </div>
       </header>
+
+      <section className="loom-quickstart" aria-label="Getting started">
+        <SectionHeader title="Quickstart" description="Guided flow: project → suite → edit → run → analyze." />
+        <ol className="loom-quickstart__steps">
+          {quickstartSteps.map((step, index) => (
+            <li key={step.label} className="loom-quickstart__step" data-done={step.done}>
+              <span className="loom-quickstart__marker" aria-hidden="true">
+                {step.done ? <Check size={14} /> : index + 1}
+              </span>
+              <span className="loom-quickstart__copy">
+                <strong>Step {index + 1}: {step.label}</strong>
+                <span>{step.hint}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {hasProject ? (
+        <section className="loom-dashboard__projects" aria-label="Projects">
+          <SectionHeader title="Projects" description={`${projects.length} project${projects.length === 1 ? "" : "s"} in this workspace`} />
+          <ProjectCards
+            projects={projects}
+            engines={engines}
+            onSelectProject={onSelectProject ?? (() => {})}
+            runCounts={runCounts}
+            lastStatus={lastStatus}
+          />
+        </section>
+      ) : (
+        <Panel>
+          <div className="loom-empty-state">
+            <p className="loom-empty-state__title">No projects yet</p>
+            <p className="loom-empty-state__description">Step 1: Create a project to organize suites and run history.</p>
+            {onOpenNewProject && <LoomButton onClick={onOpenNewProject}><Plus aria-hidden="true" size={15} /> Create project</LoomButton>}
+          </div>
+        </Panel>
+      )}
+
+      <AttentionNeeded engines={engines} suites={allSuites} recentRuns={recentRuns} onNavigate={onNavigate} />
 
       <section className="loom-dashboard__metrics" aria-label="Current simulation metrics">
         <MetricCard label="Virtual users" value={runningRuns ? "Active" : "0"} icon={<Activity aria-hidden="true" size={16} />} footer="No active simulation" />

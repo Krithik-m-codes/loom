@@ -8,6 +8,9 @@ import { EditorView } from "./components/EditorView";
 import { HistoryView } from "./components/HistoryView";
 import { EnginesView } from "./components/EnginesView";
 import { CommandPaletteModal } from "./components/CommandPaletteModal";
+import { LogDock } from "./components/dock/LogDock";
+import { RunDetailsDrawer } from "./components/RunDetailsDrawer";
+import { ToastProvider, useToast } from "./components/ui/Toast";
 import { OnboardingWizard } from "./components/setup/OnboardingWizard";
 import { NewProjectModal } from "./components/projects/NewProjectModal";
 import { NewSuiteModal } from "./components/projects/NewSuiteModal";
@@ -23,10 +26,19 @@ import {
   subscribeToRunStarted,
   subscribeToRunFinished,
 } from "./lib/ipc";
-import { EngineInfo, NormalizedMetric, Project, RunLog, TestConfig, TestSuite } from "./types";
+import { EngineInfo, NormalizedMetric, Project, RunLog, RunRecord, TestConfig, TestSuite } from "./types";
 import { configForSuite, projectConfigForSelection } from "./lib/projectState";
 
 export default function App() {
+  return (
+    <ToastProvider>
+      <AppShell />
+    </ToastProvider>
+  );
+}
+
+function AppShell() {
+  const { pushToast } = useToast();
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   // Default to Dashboard directly as requested
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -43,6 +55,7 @@ export default function App() {
   const [isCmdkOpen, setIsCmdkOpen] = useState<boolean>(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
   const [isNewSuiteOpen, setIsNewSuiteOpen] = useState<boolean>(false);
+  const [detailsRun, setDetailsRun] = useState<RunRecord | null>(null);
   const [flowExportError, setFlowExportError] = useState<string>("");
 
   const openWorkspaceTab = (tab: string) => {
@@ -241,6 +254,7 @@ export default function App() {
     setSelectedEngineId(nextConfig.engine);
     setConfig(nextConfig);
     setIsNewProjectOpen(false);
+    pushToast(`Project "${newProj.name}" created`, "success");
   };
 
   const handleCreateSuite = (suite: TestSuite) => {
@@ -278,8 +292,16 @@ export default function App() {
     engines.some((engine) => engine.id === selectedEngineId && "Ready" in engine.availability),
   );
 
-  const handleRunTest = async () => {
-    if (isRunning || !canRun) return;
+  const handleRunTest = async (engineOverride?: string, configOverride?: TestConfig) => {
+    const runEngine = engineOverride ?? selectedEngineId;
+    const runConfig = configOverride ?? config;
+    const runnable = engineOverride !== undefined || configOverride !== undefined
+      ? Boolean(
+        activeProject && runConfig.engine === runEngine && runConfig.script_path.trim() && runConfig.target.host.trim() &&
+        engines.some((engine) => engine.id === runEngine && "Ready" in engine.availability),
+      )
+      : canRun;
+    if (isRunning || !runnable) return;
 
     // Reset telemetry & navigate to Locust/Goose-grade runner dashboard
     openWorkspaceTab("runner");
@@ -288,10 +310,10 @@ export default function App() {
     setIsRunning(true);
 
     try {
-      const runId = await startRun(selectedEngineId, config);
+      const runId = await startRun(runEngine, runConfig);
       setActiveRunId(runId);
     } catch (err: any) {
-      console.error("Run error:", err);
+      pushToast(`Launch error: ${err.message || err}`, "error");
       setIsRunning(false);
       setLogs((prev) => [
         ...prev,
@@ -312,6 +334,17 @@ export default function App() {
     } catch (err) {
       console.error("Stop error:", err);
     }
+  };
+
+  const handleRunSuite = (scriptPath: string, engine: string) => {
+    const suite = projects
+      .flatMap((project) => project.suites)
+      .find((entry) => entry.scriptPath === scriptPath && entry.engine === engine);
+    const runConfig = suite ? configForSuite(suite) : { ...config, engine, script_path: scriptPath };
+    setSelectedEngineId(engine);
+    setConfig(runConfig);
+    if (suite) setActiveSuiteId(suite.id);
+    void handleRunTest(engine, runConfig);
   };
 
   const handleRerun = (engine: string, configJson: string) => {
@@ -340,7 +373,7 @@ export default function App() {
     try {
       await saveScript(filename, scriptContent);
     } catch (e) {
-      console.error("Failed to save generated script:", e);
+      pushToast("Could not save the generated scenario.", "error");
       setFlowExportError("Could not save the generated scenario. Resolve the error and try again before opening Runner.");
       return;
     }
@@ -391,7 +424,7 @@ export default function App() {
         backgroundInert={navigationOpen && isNarrowWindow}
         isRunning={isRunning}
         canRun={canRun}
-        onRunTest={handleRunTest}
+        onRunTest={() => { void handleRunTest(); }}
         onStopTest={handleStopTest}
         targetHost={config.target.host}
         onChangeTargetHost={(host) => setConfig((prev) => ({ ...prev, target: { ...prev.target, host } }))}
@@ -417,6 +450,7 @@ export default function App() {
           activeProjectId={activeProjectId}
           onOpenNewProject={() => { setNavigationOpen(false); setIsNewProjectOpen(true); }}
           onOpenNewSuite={() => { setNavigationOpen(false); setIsNewSuiteOpen(true); }}
+          onRunSuite={handleRunSuite}
         />
       </div>
       {navigationOpen && <button type="button" className="loom-sidebar-backdrop" tabIndex={-1}
@@ -435,6 +469,9 @@ export default function App() {
                 onSelectEngine={handleSelectEngine}
                 targetHost={config.target.host}
                 onRerun={handleRerun}
+                projects={projects}
+                onOpenNewProject={() => setIsNewProjectOpen(true)}
+                onSelectProject={handleSelectProject}
               />
             </div>
           )}
@@ -460,7 +497,7 @@ export default function App() {
                 onChangeConfig={setConfig}
                 isRunning={isRunning}
                 canRun={canRun}
-                onRunTest={handleRunTest}
+                onRunTest={() => { void handleRunTest(); }}
                 onStopTest={handleStopTest}
                 metrics={metrics}
                 logs={logs}
@@ -492,6 +529,7 @@ export default function App() {
                     })),
                   );
                   setConfig(configForSuite(suite));
+                  pushToast(`Suite "${suite.name}" saved`, "success");
                 }}
               />
             </div>
@@ -500,7 +538,7 @@ export default function App() {
           {openTabs.includes("history") && (
             <div id="workspace-panel-history" role="tabpanel" aria-labelledby="workspace-tab-history"
               className="loom-workspace__panel" hidden={activeTab !== "history"}>
-              <HistoryView onRerun={handleRerun} refreshRevision={runHistoryRevision} />
+              <HistoryView onRerun={handleRerun} refreshRevision={runHistoryRevision} onOpenRun={setDetailsRun} />
             </div>
           )}
 
@@ -514,15 +552,21 @@ export default function App() {
       </div>
 
       {/* 3. Command Palette Modal (Ctrl+K) */}
+      <LogDock logs={logs} isRunning={isRunning} onClearLogs={() => setLogs([])} />
+      <RunDetailsDrawer run={detailsRun} onClose={() => setDetailsRun(null)} onRerun={handleRerun} />
       <CommandPaletteModal
         isOpen={isCmdkOpen}
         onClose={() => setIsCmdkOpen(false)}
-        onRunTest={handleRunTest}
+        onRunTest={() => { void handleRunTest(); }}
         onStopTest={handleStopTest}
         isRunning={isRunning}
         onSelectTab={openWorkspaceTab}
         onSelectEngine={handleSelectEngine}
         onSelectScript={handleSelectScript}
+        projects={projects}
+        onSelectProject={handleSelectProject}
+        onOpenNewSuite={() => setIsNewSuiteOpen(true)}
+        onOpenSuite={handleSelectScript}
       />
 
       {/* 4. Professional Setup / Onboarding Wizard */}

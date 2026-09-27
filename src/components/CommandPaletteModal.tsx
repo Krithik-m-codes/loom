@@ -3,14 +3,17 @@ import { Command } from "cmdk";
 import {
   Activity,
   FileCode2,
+  FolderOpen,
   History,
   LayoutDashboard,
   Play,
+  Plus,
   Search,
   Square,
   Workflow,
   Zap,
 } from "lucide-react";
+import type { Project } from "../types";
 
 interface CommandPaletteModalProps {
   isOpen: boolean;
@@ -21,6 +24,10 @@ interface CommandPaletteModalProps {
   onSelectTab: (tab: string) => void;
   onSelectEngine: (engine: string) => void;
   onSelectScript: (script: string, engine: string) => void;
+  projects?: Project[];
+  onSelectProject?: (projectId: string) => void;
+  onOpenNewSuite?: () => void;
+  onOpenSuite?: (script: string, engine: string) => void;
 }
 
 export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
@@ -32,6 +39,10 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   onSelectTab,
   onSelectEngine,
   onSelectScript,
+  projects = [],
+  onSelectProject,
+  onOpenNewSuite,
+  onOpenSuite,
 }) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -162,6 +173,55 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                 <span>Load k6 example</span>
               </Command.Item>
             </Command.Group>
+
+            {(onOpenNewSuite || projects.length > 0) && (
+              <Command.Group heading="Projects" className="loom-command__group">
+                {onOpenNewSuite && (
+                  <Command.Item
+                    onSelect={() => {
+                      onOpenNewSuite();
+                      onClose();
+                    }}
+                    className="loom-command-item"
+                  >
+                    <Plus aria-hidden="true" size={16} />
+                    <span>New suite from template</span>
+                  </Command.Item>
+                )}
+                {projects.map((project) => (
+                  <Command.Item
+                    key={project.id}
+                    onSelect={() => {
+                      onSelectProject?.(project.id);
+                      onClose();
+                    }}
+                    className="loom-command-item"
+                  >
+                    <FolderOpen aria-hidden="true" size={16} />
+                    <span>Go to project: {project.name}</span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+
+            {projects.some((project) => project.suites.length > 0) && (
+              <Command.Group heading="Suites" className="loom-command__group">
+                {projects.flatMap((project) => project.suites).map((suite) => (
+                  <Command.Item
+                    key={suite.id}
+                    onSelect={() => {
+                      (onOpenSuite ?? onSelectScript)(suite.scriptPath, suite.engine);
+                      onSelectTab("editor");
+                      onClose();
+                    }}
+                    className="loom-command-item"
+                  >
+                    <FileCode2 aria-hidden="true" size={16} />
+                    <span>Open suite: {suite.name}</span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
           </Command.List>
 
           <footer className="loom-command-footer">
