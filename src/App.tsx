@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent }
 import { Sidebar } from "./components/Sidebar";
 import { TopNav } from "./components/TopNav";
 import { DashboardView } from "./components/DashboardView";
-import { FlowchartBuilderView } from "./components/FlowchartBuilderView";
 import { RunnerView } from "./components/RunnerView";
 import { EditorView } from "./components/EditorView";
 import { HistoryView } from "./components/HistoryView";
@@ -21,7 +20,6 @@ import {
   listSuites,
   startRun,
   stopRun,
-  saveScript,
   subscribeToMetrics,
   subscribeToLogs,
   subscribeToRunStarted,
@@ -50,6 +48,7 @@ function AppShell() {
   const [runtimeStatuses, setRuntimeStatuses] = useState<RuntimeStatus[]>([]);
   const [runtimeProgress, setRuntimeProgress] = useState<RuntimeProgress | null>(null);
   const [runtimeInstalling, setRuntimeInstalling] = useState(false);
+  const [editorRunBlock, setEditorRunBlock] = useState<string | null>(null);
   const pendingRuntimeResults = useRef(0);
   // Default to Dashboard directly as requested
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -67,11 +66,11 @@ function AppShell() {
   const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
   const [isNewSuiteOpen, setIsNewSuiteOpen] = useState<boolean>(false);
   const [detailsRun, setDetailsRun] = useState<RunRecord | null>(null);
-  const [flowExportError, setFlowExportError] = useState<string>("");
 
   const openWorkspaceTab = (tab: string) => {
-    setOpenTabs((current) => current.includes(tab) ? current : [...current, tab]);
-    setActiveTab(tab);
+    const destination = tab === "flowchart" ? "editor" : tab;
+    setOpenTabs((current) => current.includes(destination) ? current : [...current, destination]);
+    setActiveTab(destination);
     setNavigationOpen(false);
   };
 
@@ -346,6 +345,10 @@ function AppShell() {
   );
 
   const handleRunTest = async (engineOverride?: string, configOverride?: TestConfig) => {
+    if (engineOverride === undefined && configOverride === undefined && editorRunBlock) {
+      pushToast(editorRunBlock, "error");
+      return;
+    }
     const runEngine = engineOverride ?? selectedEngineId;
     const runConfig = configOverride ?? config;
     const runnable = engineOverride !== undefined || configOverride !== undefined
@@ -413,34 +416,6 @@ function AppShell() {
     }
   };
 
-  // Flowchart script transfer to Runner
-  const handleExportFlowchartScript = async (
-    scriptContent: string,
-    engine: string
-  ) => {
-    const filename =
-      engine === "locust"
-        ? "examples/locust/visual_scenario.py"
-        : "examples/k6/visual_scenario.js";
-
-    try {
-      await saveScript(filename, scriptContent);
-    } catch (e) {
-      pushToast("Could not save the generated scenario.", "error");
-      setFlowExportError("Could not save the generated scenario. Resolve the error and try again before opening Runner.");
-      return;
-    }
-
-    setFlowExportError("");
-    setSelectedEngineId(engine);
-    setConfig((prev) => ({
-      ...prev,
-      engine,
-      script_path: filename,
-    }));
-    openWorkspaceTab("runner");
-  };
-
   const handleCompleteOnboarding = () => {
     try {
       localStorage.setItem("loom_onboarding_completed", "true");
@@ -497,7 +472,7 @@ function AppShell() {
         navigationToggleRef={navigationToggleRef}
         backgroundInert={navigationOpen && isNarrowWindow}
         isRunning={isRunning}
-        canRun={canRun}
+        canRun={canRun && editorRunBlock === null}
         onRunTest={() => { void handleRunTest(); }}
         onStopTest={handleStopTest}
         targetHost={config.target.host}
@@ -531,7 +506,6 @@ function AppShell() {
         aria-hidden="true" onClick={() => setNavigationOpen(false)} />}
 
       <div className="loom-workspace" inert={navigationOpen && isNarrowWindow}>
-        {flowExportError && <p className="loom-action-error" role="alert">{flowExportError}</p>}
         <div id="main-content" className="loom-workspace__content" tabIndex={-1}>
           {openTabs.includes("dashboard") && (
             <div id="workspace-panel-dashboard" role="tabpanel" aria-labelledby="workspace-tab-dashboard"
@@ -546,16 +520,6 @@ function AppShell() {
                 projects={projects}
                 onOpenNewProject={() => setIsNewProjectOpen(true)}
                 onSelectProject={handleSelectProject}
-              />
-            </div>
-          )}
-
-          {openTabs.includes("flowchart") && (
-            <div id="workspace-panel-flowchart" role="tabpanel" aria-labelledby="workspace-tab-flowchart"
-              className="loom-workspace__panel" hidden={activeTab !== "flowchart"}>
-              <FlowchartBuilderView
-                onExportToRunner={handleExportFlowchartScript}
-                targetHost={config.target.host}
               />
             </div>
           )}
@@ -605,6 +569,7 @@ function AppShell() {
                   setConfig(configForSuite(suite));
                   pushToast(`Suite "${suite.name}" saved`, "success");
                 }}
+                onRunBlockedChange={setEditorRunBlock}
               />
             </div>
           )}

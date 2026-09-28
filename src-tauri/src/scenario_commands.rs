@@ -75,6 +75,11 @@ fn parse_config_for_engine(
 }
 
 #[tauri::command]
+pub fn list_scenario_adapters() -> Vec<scenario_core::EngineAdapterMetadata> {
+    ScenarioRegistry::builtins().metadata()
+}
+
+#[tauri::command]
 pub async fn parse_scenario_source(
     state: State<'_, ScenarioCommandState>,
     engine_id: String,
@@ -217,5 +222,17 @@ mod tests {
         assert!(bundle.files[0]
             .content
             .contains("self.client.get(\"/health\")"));
+    }
+
+    #[test]
+    fn adapter_metadata_is_the_single_source_for_engine_node_compatibility() {
+        let metadata = list_scenario_adapters();
+        let k6 = metadata.iter().find(|adapter| adapter.id == "k6").unwrap();
+        assert!(k6.compatible_node_kinds.contains(&"check".into()));
+        let goose = metadata
+            .iter()
+            .find(|adapter| adapter.id == "goose")
+            .unwrap();
+        assert!(!goose.compatible_node_kinds.contains(&"check".into()));
     }
 }

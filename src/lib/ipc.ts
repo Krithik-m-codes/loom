@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import type { EngineInfo, NormalizedMetric, Project, RunLog, RunRecord, SuiteWithContent, TestConfig, TestSuite } from "../types";
+import type { ConfigParseResult, EngineAdapterMetadata, EngineBundle, EngineConfigFile, ParseContext, ParseResult, ScenarioDocument, SourceDocument } from "./scenario/types";
 
 // Check if running inside Tauri
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -147,4 +148,31 @@ export async function getSuite(id: string): Promise<SuiteWithContent> {
 export async function saveVisualFlow(suiteId: string, nodesJson: string): Promise<void> {
   if (!isTauri) return;
   await invoke("save_visual_flow", { suiteId, nodesJson });
+}
+
+export async function listScenarioAdapters(): Promise<EngineAdapterMetadata[]> {
+  if (!isTauri) throw new Error("Scenario adapters require the Tauri desktop app");
+  return await invoke<EngineAdapterMetadata[]>("list_scenario_adapters");
+}
+
+export async function parseScenarioSource(engineId: string, source: SourceDocument, context: ParseContext): Promise<ParseResult> {
+  if (!isTauri) throw new Error("Scenario parsing requires the Tauri desktop app");
+  return await invoke<ParseResult>("parse_scenario_source", { engineId, source, context });
+}
+
+export async function parseEngineConfig(engineId: string, source: EngineConfigFile): Promise<ConfigParseResult> {
+  if (!isTauri) throw new Error("Engine config parsing requires the Tauri desktop app");
+  return await invoke<ConfigParseResult>("parse_engine_config", { engineId, source });
+}
+
+export async function generateScenarioBundle(engineId: string, document: ScenarioDocument): Promise<EngineBundle> {
+  if (!isTauri) throw new Error("Scenario generation requires the Tauri desktop app");
+  try {
+    return await invoke<EngineBundle>("generate_scenario_bundle", { engineId, document });
+  } catch (error) {
+    const message = Array.isArray(error)
+      ? error.map((diagnostic: { message?: string }) => diagnostic.message ?? "Scenario generation failed").join("\n")
+      : error instanceof Error ? error.message : String(error);
+    throw new Error(message);
+  }
 }

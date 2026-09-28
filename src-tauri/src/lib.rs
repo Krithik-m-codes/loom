@@ -1044,6 +1044,7 @@ pub fn run() {
             scenario_commands::parse_scenario_source,
             scenario_commands::cancel_scenario_parse,
             scenario_commands::parse_engine_config,
+            scenario_commands::list_scenario_adapters,
             scenario_commands::generate_scenario_bundle,
         ])
         .run(tauri::generate_context!())
