@@ -6,6 +6,7 @@ members = [
     "crates/engine-goose",
     "crates/engine-k6",
     "crates/runtime-manager",
+    "crates/scenario-core",
 ]
 resolver = "2"
 
