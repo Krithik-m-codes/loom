@@ -44,13 +44,15 @@ pub enum DiagnosticSeverity {
     Info,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParseContext {
     pub project_id: String,
     pub suite_id: String,
     pub max_bytes: usize,
     pub cancel_id: String,
+    #[serde(skip)]
+    pub cancellation: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

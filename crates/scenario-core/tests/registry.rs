@@ -68,3 +68,28 @@ fn builtins_are_registered_and_new_adapters_need_no_canvas_registration() {
         "Example"
     );
 }
+
+#[test]
+fn built_in_adapter_parsing_uses_the_same_engine_contract_as_direct_import() {
+    let registry = ScenarioRegistry::builtins();
+    let source = SourceDocument {
+        id: "locust-file".into(),
+        file_name: "locustfile.py".into(),
+        language: "python".into(),
+        content: "from locust import HttpUser\nclass User(HttpUser):\n    def task(self):\n        self.client.get(\"/health\")\n".into(),
+    };
+    let context = ParseContext {
+        project_id: "project-1".into(),
+        suite_id: "suite-1".into(),
+        max_bytes: 2 * 1024 * 1024,
+        cancel_id: "registry-test".into(),
+        cancellation: None,
+    };
+    let parsed = registry
+        .adapter("locust")
+        .unwrap()
+        .parse_script(&source, &context);
+    assert!(parsed.nodes.iter().any(
+        |node| matches!(node, scenario_core::ScenarioNode::Request { url, .. } if url == "/health")
+    ));
+}

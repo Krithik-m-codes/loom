@@ -22,6 +22,7 @@ engine-locust = { path = "../crates/engine-locust" }
 engine-goose = { path = "../crates/engine-goose" }
 engine-k6 = { path = "../crates/engine-k6" }
 runtime-manager = { path = "../crates/runtime-manager" }
+scenario-core = { path = "../crates/scenario-core" }
 tokio-util = { version = "0.7", features = ["rt"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4", "serde"] }

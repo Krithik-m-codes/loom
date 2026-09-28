@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
+use crate::parsers::{parse_engine_config, parse_goose, parse_k6, parse_locust};
 use crate::{
     ConfigParseResult, DiagnosticSeverity, EngineAdapterMetadata, EngineBundle, EngineConfigFile,
-    LicenseTier, ParseContext, ParseResult, ScenarioDiagnostic, ScenarioDocument, ScenarioNode,
-    SourceDocument,
+    LicenseTier, ParseContext, ParseResult, ScenarioDiagnostic, ScenarioDocument, SourceDocument,
 };
 
 pub trait ScenarioEngineAdapter: Send + Sync {
@@ -138,37 +138,17 @@ impl ScenarioEngineAdapter for ReservedAdapter {
         self.0.clone()
     }
 
-    fn parse_script(&self, source: &SourceDocument, _: &ParseContext) -> ParseResult {
-        let source_len = source.content.len();
-        ParseResult {
-            source: source.clone(),
-            nodes: if source_len == 0 {
-                vec![]
-            } else {
-                vec![ScenarioNode::Native {
-                    id: format!("{}-native", source.id),
-                    engine_ids: vec![self.0.id.clone()],
-                    span: crate::SourceSpan {
-                        file_id: source.id.clone(),
-                        start_offset: 0,
-                        end_offset: source_len,
-                    },
-                    reason: "This engine parser is not available yet; source is kept intact."
-                        .into(),
-                }]
-            },
-            diagnostics: vec![self.unavailable()],
-            covered_ranges: vec![],
-            support_percent: 0,
+    fn parse_script(&self, source: &SourceDocument, context: &ParseContext) -> ParseResult {
+        match self.0.id.as_str() {
+            "locust" => parse_locust(source, context),
+            "goose" => parse_goose(source, context),
+            "k6" => parse_k6(source, context),
+            _ => unreachable!("built-in adapter id is fixed"),
         }
     }
 
     fn parse_config(&self, source: &EngineConfigFile) -> ConfigParseResult {
-        ConfigParseResult {
-            source: source.clone(),
-            recognized: serde_json::Value::Null,
-            diagnostics: vec![self.unavailable()],
-        }
+        parse_engine_config(&self.0.id, source)
     }
 
     fn generate(&self, _: &ScenarioDocument) -> Result<EngineBundle, Vec<ScenarioDiagnostic>> {

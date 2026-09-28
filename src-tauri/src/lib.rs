@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 mod db;
 mod runtime_commands;
+mod scenario_commands;
 
 // ---------------------------------------------------------------------------
 // App state
@@ -984,11 +985,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            app.manage(scenario_commands::ScenarioCommandState::default());
             let runtime_context = Arc::new(std::sync::RwLock::new(RuntimeContext::default()));
-            let runtime_root = app
-                .path()
-                .app_data_dir()
-                .map_err(|error| error.to_string());
+            let runtime_root = app.path().app_data_dir().map_err(|error| error.to_string());
             app.manage(runtime_commands::RuntimeCommandState::new(
                 runtime_root,
                 runtime_context.clone(),
@@ -1042,6 +1041,10 @@ pub fn run() {
             runtime_commands::get_runtime_status,
             runtime_commands::install_runtimes,
             runtime_commands::cancel_runtime_installation,
+            scenario_commands::parse_scenario_source,
+            scenario_commands::cancel_scenario_parse,
+            scenario_commands::parse_engine_config,
+            scenario_commands::generate_scenario_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Loom");
