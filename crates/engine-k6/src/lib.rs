@@ -182,7 +182,7 @@ impl LoadEngine for K6Engine {
         let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
         let json_out = run_dir.join("metrics.json");
 
-        let args = vec![
+        let mut args = vec![
             "run".to_string(),
             cfg.script_path.to_string_lossy().to_string(),
             "--vus".to_string(),
@@ -192,6 +192,12 @@ impl LoadEngine for K6Engine {
             "--out".to_string(),
             format!("json={}", json_out.to_string_lossy()),
         ];
+        if let Some(config_path) = &cfg.engine_config_path {
+            args.extend([
+                "--config".to_string(),
+                config_path.to_string_lossy().into_owned(),
+            ]);
+        }
 
         let mut env = HashMap::new();
         env.insert("TARGET_HOST".to_string(), cfg.target.host.clone());
@@ -217,7 +223,7 @@ impl LoadEngine for K6Engine {
         std::fs::create_dir_all(run_dir)?;
         let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
         let json_out = run_dir.join("metrics.json");
-        let args = vec![
+        let mut args = vec![
             "run".into(),
             cfg.script_path.to_string_lossy().to_string(),
             "--vus".into(),
@@ -227,6 +233,12 @@ impl LoadEngine for K6Engine {
             "--out".into(),
             format!("json={}", json_out.to_string_lossy()),
         ];
+        if let Some(config_path) = &cfg.engine_config_path {
+            args.extend([
+                "--config".into(),
+                config_path.to_string_lossy().into_owned(),
+            ]);
+        }
         let mut env = resolved.env.clone();
         env.insert("TARGET_HOST".into(), cfg.target.host.clone());
         Ok(PreparedJob {
@@ -364,8 +376,10 @@ mod tests {
     fn prepared_job_prefers_managed_k6_and_preserves_runtime_environment() {
         let root = std::env::temp_dir().join(format!("loom k6 runtime {}", Uuid::new_v4()));
         let script = root.join("scenario with spaces.js");
+        let config = root.join("k6 options.json");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(&script, "export default function () {}\n").unwrap();
+        std::fs::write(&config, "{\"vus\":2}").unwrap();
         let cfg = TestConfig {
             project_name: "project".into(),
             engine: "k6".into(),
@@ -379,6 +393,7 @@ mod tests {
                 host: "http://localhost".into(),
                 headers: None,
             },
+            engine_config_path: Some(config.clone()),
         };
         let managed = root.join("managed k6").join("k6");
         let mut runtime = RuntimeContext::default();
@@ -397,6 +412,8 @@ mod tests {
             .args
             .iter()
             .any(|arg| arg.contains("scenario with spaces.js")));
+        let config_arg = job.args.iter().position(|arg| arg == "--config").unwrap();
+        assert_eq!(job.args[config_arg + 1], config.to_string_lossy());
         assert_eq!(
             job.env.get("LOOM_RUNTIME").map(String::as_str),
             Some("managed")

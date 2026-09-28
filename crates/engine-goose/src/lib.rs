@@ -235,10 +235,21 @@ impl LoadEngine for GooseEngine {
         fs::create_dir_all(&source_dir)?;
         fs::copy(&cfg.script_path, source_dir.join("main.rs"))?;
         let manifest_path = project_dir.join("Cargo.toml");
-        fs::write(
-            &manifest_path,
-            "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n",
-        )?;
+        if let Some(source_manifest) = &cfg.engine_config_path {
+            if !source_manifest.is_file()
+                || source_manifest.extension().is_none_or(|ext| ext != "toml")
+            {
+                return Err(EngineError::Validation(
+                    "Goose manifest must be an existing TOML file".into(),
+                ));
+            }
+            fs::copy(source_manifest, &manifest_path)?;
+        } else {
+            fs::write(
+                &manifest_path,
+                "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n",
+            )?;
+        }
 
         let report_file = run_dir.join("report.html");
         let args = vec![
@@ -290,7 +301,18 @@ impl LoadEngine for GooseEngine {
         fs::create_dir_all(&source_dir)?;
         fs::copy(&cfg.script_path, source_dir.join("main.rs"))?;
         let manifest_path = project_dir.join("Cargo.toml");
-        fs::write(&manifest_path, "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n")?;
+        if let Some(source_manifest) = &cfg.engine_config_path {
+            if !source_manifest.is_file()
+                || source_manifest.extension().is_none_or(|ext| ext != "toml")
+            {
+                return Err(EngineError::Validation(
+                    "Goose manifest must be an existing TOML file".into(),
+                ));
+            }
+            fs::copy(source_manifest, &manifest_path)?;
+        } else {
+            fs::write(&manifest_path, "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n")?;
+        }
         let args = vec![
             "run".into(),
             "--release".into(),
@@ -430,6 +452,7 @@ mod tests {
                 host: "http://localhost:8080".to_string(),
                 headers: None,
             },
+            engine_config_path: None,
         };
         assert!(engine.validate_config(&valid_cfg).is_ok());
 
@@ -445,6 +468,9 @@ mod tests {
         let script_path = root.join("scenario.rs");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(&script_path, "fn main() {}\n").unwrap();
+        let source_manifest = root.join("manifest.toml");
+        let manifest_content = "[package]\nname = \"my_goose_test\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n";
+        std::fs::write(&source_manifest, manifest_content).unwrap();
         let cfg = TestConfig {
             project_name: "goose_proj".to_string(),
             engine: "goose".to_string(),
@@ -458,6 +484,7 @@ mod tests {
                 host: "http://localhost:8080".to_string(),
                 headers: None,
             },
+            engine_config_path: Some(source_manifest),
         };
         let run_dir = root.join("run");
 
@@ -480,6 +507,10 @@ mod tests {
         assert_eq!(job.args.get(manifest_index + 1), Some(&manifest_path));
         assert!(run_dir.join("goose-project/src/main.rs").exists());
         assert!(run_dir.join("goose-project/Cargo.toml").exists());
+        assert_eq!(
+            std::fs::read_to_string(run_dir.join("goose-project/Cargo.toml")).unwrap(),
+            manifest_content
+        );
         let managed_cargo = root.join("managed toolchain with spaces").join("cargo");
         let mut runtime = RuntimeContext::default();
         runtime.set(

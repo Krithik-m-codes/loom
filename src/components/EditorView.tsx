@@ -3,7 +3,7 @@ import { MonacoEditor, monacoLanguageForEngine } from "./ui/MonacoEditor";
 import { ScenarioStudio } from "./scenario/ScenarioStudio";
 import { TemplatePickerModal } from "./projects/TemplatePickerModal";
 import type { StarterTemplate } from "../templates";
-import { generateScenarioBundle, getSuite, listScenarioAdapters, parseEngineConfig, parseScenarioSource, updateSuite } from "../lib/ipc";
+import { generateScenarioBundle, getSuite, listScenarioAdapters, parseEngineConfig, parseScenarioSource, persistScenarioBundle, updateSuite } from "../lib/ipc";
 import { validateScenarioDocument } from "../lib/scenario/types";
 import type { EngineAdapterMetadata, ScenarioDiagnostic, ScenarioDocument, SourceDocument } from "../lib/scenario/types";
 import type { TestConfig, TestSuite } from "../types";
@@ -51,6 +51,8 @@ export const EditorView: React.FC<EditorViewProps> = ({
   const [mode, setMode] = useState<"visual" | "code">("visual");
   const [code, setCode] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
+  const [engineConfigPath, setEngineConfigPath] = useState<string | null>(null);
+  const [suiteConfig, setSuiteConfig] = useState<TestConfig | null>(config ?? null);
   const [scenarioDocument, setScenarioDocument] = useState<ScenarioDocument | null>(null);
   const [adapters, setAdapters] = useState<EngineAdapterMetadata[]>([]);
   const [scenarioDiagnostics, setScenarioDiagnostics] = useState<ScenarioDiagnostic[]>([]);
@@ -99,6 +101,8 @@ export const EditorView: React.FC<EditorViewProps> = ({
       .then((suite) => {
         if (cancelled) return;
         setCode(suite.scriptContent ?? "");
+        setSuiteConfig(suite.config ?? null);
+        setEngineConfigPath(suite.config?.engine_config_path ?? null);
         setAnalysis(null);
         setProjectId(suite.projectId);
         const savedDocument = parseScenarioDocument(suite.visualNodes);
@@ -134,8 +138,10 @@ export const EditorView: React.FC<EditorViewProps> = ({
     try {
       const updated = await updateSuite(suiteId, {
         scriptContent: code,
+        ...((config ?? suiteConfig) ? { config: { ...(config ?? suiteConfig)!, engine_config_path: engineConfigPath } } : {}),
         visualNodes: scenarioDocument ?? undefined,
       });
+      if (updated.config) setSuiteConfig(updated.config);
       onSuiteSaved?.(updated);
       setDirty(false);
       setScriptDirty(false);
@@ -203,6 +209,10 @@ export const EditorView: React.FC<EditorViewProps> = ({
   };
 
   const applyBundle = async (bundle: import("../lib/scenario/types").EngineBundle) => {
+    if (!suiteId || !projectId) {
+      setStatus("Select a saved project suite before applying generated files.");
+      return;
+    }
     if (bundle.engineId !== engine) {
       setStatus(`This suite uses ${engine}; create or select a ${bundle.engineId} suite before applying that engine's output.`);
       return;
@@ -213,6 +223,7 @@ export const EditorView: React.FC<EditorViewProps> = ({
       return;
     }
     try {
+      const persisted = await persistScenarioBundle(suiteId, bundle);
       const pathParts = script.path.split(/[\\/]/);
       const source: SourceDocument = {
         id: `source-${suiteId}`,
@@ -227,15 +238,16 @@ export const EditorView: React.FC<EditorViewProps> = ({
         cancelId: globalThis.crypto?.randomUUID?.() ?? `apply-${Date.now()}`,
       });
       setCode(script.content);
+      setEngineConfigPath(persisted.configPath);
       setScenarioDocument((current) => current ? { ...current, engineId: engine, sources: [parsed.source], nodes: parsed.nodes } : null);
       setScenarioDiagnostics(parsed.diagnostics);
       setSupportPercent(parsed.supportPercent);
       setSourceStale(false);
-      setScenarioPending(bundle.files.some((file) => file.role === "config"));
+      setScenarioPending(false);
       setMode("code");
       setDirty(true);
       setScriptDirty(true);
-      setStatus(`Generated ${script.path} is staged in the editor and diagram. Save the suite to persist both; extra bundle files will be saved with project-artifact support.`);
+      setStatus(`Generated files saved to this suite. Save the suite to apply the script${persisted.configPath ? " and engine config" : ""}; engine sidecars are ready for the next run.`);
     } catch (err) {
       setStatus(`Generated preview was not applied because its source could not be re-imported: ${err instanceof Error ? err.message : String(err)}`);
     }

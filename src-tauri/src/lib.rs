@@ -114,6 +114,21 @@ async fn start_run(
     engine_id: String,
     config: TestConfig,
 ) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
+    if let Some(config_path) = &config.engine_config_path {
+        let managed_root = std::fs::canonicalize(app_data_dir.join("scripts"))
+            .map_err(|e| format!("Loom project storage is unavailable: {e}"))?;
+        let resolved = std::fs::canonicalize(config_path)
+            .map_err(|e| format!("Engine config/manifest file is unavailable: {e}"))?;
+        if !resolved.is_file() || !resolved.starts_with(managed_root) {
+            return Err(
+                "Engine config/manifest must be a file inside Loom-managed project storage".into(),
+            );
+        }
+    }
     // Find the engine
     let engine = state
         .engines
@@ -138,10 +153,6 @@ async fn start_run(
     engine.validate_config(&config).map_err(|e| e.to_string())?;
 
     // Create run directory
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
     let run_id = Uuid::new_v4();
     let run_dir = app_data_dir.join("runs").join(run_id.to_string());
 
@@ -1046,6 +1057,7 @@ pub fn run() {
             scenario_commands::parse_engine_config,
             scenario_commands::list_scenario_adapters,
             scenario_commands::generate_scenario_bundle,
+            scenario_commands::persist_scenario_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Loom");

@@ -356,6 +356,12 @@ impl LoadEngine for LocustEngine {
             "--csv".to_string(),
             stats_prefix.to_string_lossy().to_string(),
         ]);
+        if let Some(config_path) = &cfg.engine_config_path {
+            args.extend([
+                "--config".to_string(),
+                config_path.to_string_lossy().into_owned(),
+            ]);
+        }
 
         Ok(PreparedJob {
             run_id: Uuid::new_v4(),
@@ -400,6 +406,13 @@ impl LoadEngine for LocustEngine {
             "--csv".into(),
             stats_prefix.to_string_lossy().to_string(),
         ];
+        let mut args = args;
+        if let Some(config_path) = &cfg.engine_config_path {
+            args.extend([
+                "--config".into(),
+                config_path.to_string_lossy().into_owned(),
+            ]);
+        }
         Ok(PreparedJob {
             run_id: Uuid::new_v4(),
             work_dir: run_dir.to_path_buf(),
@@ -638,6 +651,7 @@ mod tests {
                 host: "http://localhost:8080".to_string(),
                 headers: None,
             },
+            engine_config_path: None,
         };
         assert!(engine.validate_config(&cfg).is_err());
     }
@@ -719,6 +733,7 @@ mod tests {
                 host: "http://localhost:8080".to_string(),
                 headers: None,
             },
+            engine_config_path: None,
         };
 
         let run_dir = temp_dir.join("run");
@@ -749,5 +764,35 @@ mod tests {
 
         // Cleanup
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn prepared_job_passes_explicit_locust_config_path() {
+        let engine = LocustEngine::new();
+        let root = std::env::temp_dir().join(format!("loom_locust_config_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let script = root.join("test.py");
+        let config = root.join("locust.conf");
+        std::fs::write(&script, "from locust import HttpUser\n").unwrap();
+        std::fs::write(&config, "users=3\n").unwrap();
+        let cfg = TestConfig {
+            project_name: "test".into(),
+            engine: "locust".into(),
+            script_path: script,
+            load_profile: LoadProfile {
+                users: 3,
+                spawn_rate: 1,
+                duration: "2s".into(),
+            },
+            target: TargetConfig {
+                host: "http://localhost".into(),
+                headers: None,
+            },
+            engine_config_path: Some(config.clone()),
+        };
+        let job = engine.prepare_workspace(&cfg, &root.join("run")).unwrap();
+        let index = job.args.iter().position(|arg| arg == "--config").unwrap();
+        assert_eq!(job.args[index + 1], config.to_string_lossy());
+        let _ = std::fs::remove_dir_all(root);
     }
 }

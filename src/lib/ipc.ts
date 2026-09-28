@@ -176,3 +176,8 @@ export async function generateScenarioBundle(engineId: string, document: Scenari
     throw new Error(message);
   }
 }
+
+export async function persistScenarioBundle(suiteId: string, bundle: EngineBundle): Promise<{ configPath: string | null }> {
+  if (!isTauri) throw new Error("Saving generated scenario files requires the Tauri desktop app");
+  return await invoke<{ configPath: string | null }>("persist_scenario_bundle", { suiteId, bundle });
+}

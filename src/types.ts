@@ -31,6 +31,8 @@ export interface TestConfig {
   script_path: string;
   load_profile: LoadProfile;
   target: TargetConfig;
+  /** Persisted engine-native config file, constrained by Tauri to this suite's artifact directory. */
+  engine_config_path?: string | null;
 }
 
 export type MetricKind =

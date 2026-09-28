@@ -50,6 +50,8 @@ pub struct TestConfig {
     pub script_path: PathBuf,
     pub load_profile: LoadProfile,
     pub target: TargetConfig,
+    #[serde(default)]
+    pub engine_config_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
