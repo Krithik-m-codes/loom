@@ -28,7 +28,7 @@ export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: N
     setError("");
     setIsSubmitting(true);
     try {
-      const created = await createProject(name.trim(), targetHost.trim(), selectedEngine);
+      const created = await createProject(name.trim(), targetHost.trim(), selectedEngine, description.trim());
       const now = new Date().toISOString();
       onCreateProject({
         ...created,
@@ -77,7 +77,7 @@ export const NewProjectModal = ({ isOpen, onClose, engines, onCreateProject }: N
           </div>
 
           <div className="loom-form-field">
-            <label htmlFor="project-description">Description <span className="loom-form-field__optional">optional</span></label>
+            <label htmlFor="project-description">Project description <span className="loom-form-field__optional">optional</span></label>
             <input
               id="project-description"
               className="loom-input"

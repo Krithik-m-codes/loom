@@ -42,9 +42,10 @@ describe("NewProjectModal", () => {
     );
 
     await user.type(screen.getByLabelText("Project name"), "Payments");
+    await user.type(screen.getByLabelText(/^Project description/), "Payment flow load testing");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
 
-    expect(createProject).toHaveBeenCalledWith("Payments", "http://localhost:8080", "locust");
+    expect(createProject).toHaveBeenCalledWith("Payments", "http://localhost:8080", "locust", "Payment flow load testing");
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Payments", suites: [] }),
     ));

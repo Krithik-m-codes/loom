@@ -24,7 +24,7 @@
 //! 4. Accepts a 1–2 second lag between reality and the UI as a known limitation.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -38,62 +38,6 @@ pub struct LocustEngine;
 impl LocustEngine {
     pub fn new() -> Self {
         LocustEngine
-    }
-
-    /// Dynamically locate vendored Locust directory across candidate paths:
-    /// 1. Current working directory and parent paths (`vendor/locust`, `../vendor/locust`, `../../vendor/locust`)
-    /// 2. Current executable directory (development & production desktop application bundles)
-    pub fn find_vendored_locust() -> Option<PathBuf> {
-        let cwd_candidates = [
-            PathBuf::from("vendor/locust"),
-            PathBuf::from("../vendor/locust"),
-            PathBuf::from("../../vendor/locust"),
-        ];
-        for c in &cwd_candidates {
-            if c.exists() {
-                if let Ok(abs) = std::fs::canonicalize(c) {
-                    return Some(abs);
-                }
-            }
-        }
-
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(exe_dir) = exe.parent() {
-                let exe_candidates = [
-                    exe_dir.join("vendor/locust"),
-                    exe_dir.join("../vendor/locust"),
-                    exe_dir.join("../../vendor/locust"),
-                    exe_dir.join("resources/vendor/locust"),
-                    exe_dir.join("../Resources/vendor/locust"),
-                    exe_dir.join("../Resources/resources/vendor/locust"),
-                ];
-                for c in &exe_candidates {
-                    if c.exists() {
-                        if let Ok(abs) = std::fs::canonicalize(c) {
-                            return Some(abs);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Verify whether a Python executable can successfully import Locust from the vendored path.
-    pub fn test_python_with_vendored(py: &Path, vendored_path: &Path) -> bool {
-        let script = format!(
-            "import sys; sys.path.insert(0, r'{}'); import locust",
-            vendored_path.to_string_lossy()
-        );
-        if let Ok(out) = std::process::Command::new(py)
-            .args(["-c", &script])
-            .output()
-        {
-            out.status.success()
-        } else {
-            false
-        }
     }
 
     /// Parse Locust stats_stats_history.csv rows into normalized metrics.
@@ -285,27 +229,6 @@ impl LoadEngine for LocustEngine {
             }
         }
 
-        // Priority 3: Check dynamically located vendored Locust with Python runtime
-        if let Some(vendored) = Self::find_vendored_locust() {
-            for py in &["python", "python3"] {
-                if let Ok(path) = which::which(py) {
-                    if Self::test_python_with_vendored(&path, &vendored) {
-                        return EngineAvailability::Ready {
-                            version: Some("2.44.1 (Vendored)".to_string()),
-                        };
-                    }
-                }
-            }
-
-            let has_python = which::which("python").is_ok() || which::which("python3").is_ok();
-            let install_hint = if has_python {
-                "Locust source is vendored, but Python dependencies (gevent, requests, etc.) are missing.\nInstall them with:\n  pip install locust".to_string()
-            } else {
-                "Locust source is vendored, but Python was not found on PATH.\nPlease install Python 3.10+ from python.org, or install Locust via pip:\n  pip install locust".to_string()
-            };
-            return EngineAvailability::NotInstalled { install_hint };
-        }
-
         EngineAvailability::NotInstalled {
             install_hint: "Install Locust via pip:\n  pip install locust\n\nOr see: https://docs.locust.io/en/stable/installation.html".to_string(),
         }
@@ -358,22 +281,12 @@ impl LoadEngine for LocustEngine {
             ))
         })?;
 
-        let vendored_opt = Self::find_vendored_locust();
-
         let (binary_path, base_args, env) = if let Ok(locust_path) = which::which("locust") {
             (locust_path, vec![], HashMap::new())
         } else if let Ok(py_path) = which::which("python") {
-            let mut env = HashMap::new();
-            if let Some(abs) = &vendored_opt {
-                env.insert("PYTHONPATH".to_string(), abs.to_string_lossy().to_string());
-            }
-            (py_path, vec!["-m".to_string(), "locust".to_string()], env)
+            (py_path, vec!["-m".to_string(), "locust".to_string()], HashMap::new())
         } else if let Ok(py3_path) = which::which("python3") {
-            let mut env = HashMap::new();
-            if let Some(abs) = &vendored_opt {
-                env.insert("PYTHONPATH".to_string(), abs.to_string_lossy().to_string());
-            }
-            (py3_path, vec!["-m".to_string(), "locust".to_string()], env)
+            (py3_path, vec!["-m".to_string(), "locust".to_string()], HashMap::new())
         } else {
             return Err(EngineError::NotInstalled {
                 install_hint: "locust or python not found on PATH".to_string(),
@@ -666,18 +579,6 @@ mod tests {
         // Check error rate
         let err = metrics.iter().find(|m| m.metric == MetricKind::ErrorRate).unwrap();
         assert!((err.value - 0.005).abs() < 0.001); // 5/1000
-    }
-
-    #[test]
-    fn test_find_vendored_locust() {
-        let vendored = LocustEngine::find_vendored_locust();
-        // When running within the workspace, vendored path should resolve if vendor/locust exists
-        if Path::new("vendor/locust").exists() || Path::new("../../vendor/locust").exists() {
-            assert!(vendored.is_some(), "Vendored Locust directory should be found");
-            let p = vendored.unwrap();
-            assert!(p.exists());
-            assert!(p.is_absolute());
-        }
     }
 
     #[test]

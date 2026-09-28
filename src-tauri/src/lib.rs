@@ -504,17 +504,24 @@ fn list_projects(state: tauri::State<'_, AppState>) -> Result<Vec<ProjectRecord>
 }
 
 #[tauri::command]
-fn create_project(state: tauri::State<'_, AppState>, name: String, target_host: String, default_engine: String) -> Result<ProjectRecord, String> {
+fn create_project(
+    state: tauri::State<'_, AppState>,
+    name: String,
+    target_host: String,
+    default_engine: String,
+    description: Option<String>,
+) -> Result<ProjectRecord, String> {
     let name = name.trim().to_string();
     let target_host = target_host.trim().to_string();
+    let description = description.unwrap_or_default().trim().to_string();
     if name.is_empty() { return Err("Project name must not be empty".into()); }
     if target_host.is_empty() { return Err("Target host must not be empty".into()); }
     validate_suite_engine(&default_engine)?;
     let id = format!("proj-{}", Uuid::new_v4());
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.execute(
-        "INSERT INTO projects (id, name, target_host, default_engine) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![id, name, target_host, default_engine],
+        "INSERT INTO projects (id, name, description, target_host, default_engine) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![id, name, description, target_host, default_engine],
     ).map_err(|e| e.to_string())?;
     let rec = db.query_row(
         "SELECT id, name, description, target_host, default_engine, created_at, updated_at FROM projects WHERE id = ?1",

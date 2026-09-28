@@ -190,8 +190,8 @@ describe("project startup and run gating", () => {
   it("creates a project from the modal and selects it in a fresh database", async () => {
     const user = userEvent.setup();
     seedProjects([]);
-    vi.mocked(createProject).mockImplementation(async (name: string, targetHost: string, defaultEngine: string) => ({
-      id: "proj-created", name, description: "", targetHost, defaultEngine,
+    vi.mocked(createProject).mockImplementation(async (name: string, targetHost: string, defaultEngine: string, description = "") => ({
+      id: "proj-created", name, description, targetHost, defaultEngine,
       createdAt: "2026-09-27T00:00:00.000Z", suites: [],
     }));
     render(<App />);
@@ -201,7 +201,7 @@ describe("project startup and run gating", () => {
     await user.type(screen.getByRole("textbox", { name: "Project name" }), "Created workspace");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
 
-    expect(createProject).toHaveBeenCalledWith("Created workspace", "http://localhost:8080", "locust");
+    expect(createProject).toHaveBeenCalledWith("Created workspace", "http://localhost:8080", "locust", "");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Create load testing project" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /Created workspace/ })).toBeVisible();
     // A fresh project starts with no suites, so there is nothing runnable yet.

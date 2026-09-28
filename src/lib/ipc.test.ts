@@ -30,11 +30,12 @@ describe("project ipc", () => {
 
   it("creates a project with trimmed fields", async () => {
     vi.mocked(invoke).mockResolvedValue({ id: "proj-1" });
-    await createProject("  Demo  ", "http://localhost:8080", "locust");
+    await createProject("  Demo  ", "http://localhost:8080", "locust", "Payment flow load testing");
     expect(invoke).toHaveBeenCalledWith("create_project", {
       name: "  Demo  ",
       targetHost: "http://localhost:8080",
       defaultEngine: "locust",
+      description: "Payment flow load testing",
     });
   });
 

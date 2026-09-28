@@ -96,9 +96,9 @@ export async function listProjects(): Promise<Project[]> {
   return await invoke<Project[]>("list_projects");
 }
 
-export async function createProject(name: string, targetHost: string, defaultEngine: string): Promise<Project> {
+export async function createProject(name: string, targetHost: string, defaultEngine: string, description = ""): Promise<Project> {
   if (!isTauri) throw new Error("Projects require the Tauri desktop app (cargo tauri dev)");
-  return await invoke<Project>("create_project", { name, targetHost, defaultEngine });
+  return await invoke<Project>("create_project", { name, targetHost, defaultEngine, description });
 }
 
 export async function updateProject(id: string, patch: { name?: string; targetHost?: string; defaultEngine?: string }): Promise<Project> {
