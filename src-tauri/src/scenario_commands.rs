@@ -188,4 +188,34 @@ mod tests {
             .any(|diagnostic| diagnostic.code == "CONFIG_UNKNOWN_KEY"));
         assert_eq!(parsed.source.content, config.content);
     }
+
+    #[test]
+    fn generate_command_returns_previewable_files_from_the_registered_adapter() {
+        let document = ScenarioDocument {
+            schema_version: 1,
+            engine_id: "locust".into(),
+            project_id: "project-1".into(),
+            suite_id: "suite-1".into(),
+            sources: vec![],
+            nodes: vec![ScenarioNode::Request {
+                id: "request-1".into(),
+                engine_ids: vec!["locust".into()],
+                span: None,
+                method: "GET".into(),
+                url: "/health".into(),
+                headers: None,
+                body: None,
+            }],
+            config_files: vec![],
+            legacy_payload: None,
+        };
+
+        let bundle = generate_scenario_bundle("locust".into(), document).unwrap();
+
+        assert_eq!(bundle.engine_id, "locust");
+        assert_eq!(bundle.files[0].path, "locustfile.py");
+        assert!(bundle.files[0]
+            .content
+            .contains("self.client.get(\"/health\")"));
+    }
 }

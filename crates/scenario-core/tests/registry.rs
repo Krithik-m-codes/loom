@@ -54,6 +54,7 @@ impl ScenarioEngineAdapter for ExampleAdapter {
 #[test]
 fn builtins_are_registered_and_new_adapters_need_no_canvas_registration() {
     let mut registry = ScenarioRegistry::builtins();
+    let metadata = registry.metadata();
     let mut ids: Vec<_> = registry
         .metadata()
         .into_iter()
@@ -61,6 +62,21 @@ fn builtins_are_registered_and_new_adapters_need_no_canvas_registration() {
         .collect();
     ids.sort();
     assert_eq!(ids, ["goose", "k6", "locust"]);
+
+    for id in ["locust", "goose"] {
+        let adapter = metadata.iter().find(|adapter| adapter.id == id).unwrap();
+        assert!(!adapter
+            .compatible_node_kinds
+            .iter()
+            .any(|kind| kind == "check"));
+        assert!(!adapter
+            .compatible_node_kinds
+            .iter()
+            .any(|kind| kind == "group"));
+    }
+    let k6 = metadata.iter().find(|adapter| adapter.id == "k6").unwrap();
+    assert!(k6.compatible_node_kinds.iter().any(|kind| kind == "check"));
+    assert!(k6.compatible_node_kinds.iter().any(|kind| kind == "group"));
 
     registry.register(Box::new(ExampleAdapter)).unwrap();
     assert_eq!(

@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
+use crate::generators::{generate_goose, generate_k6, generate_locust};
 use crate::parsers::{parse_engine_config, parse_goose, parse_k6, parse_locust};
 use crate::{
-    ConfigParseResult, DiagnosticSeverity, EngineAdapterMetadata, EngineBundle, EngineConfigFile,
-    LicenseTier, ParseContext, ParseResult, ScenarioDiagnostic, ScenarioDocument, SourceDocument,
+    ConfigParseResult, EngineAdapterMetadata, EngineBundle, EngineConfigFile, LicenseTier,
+    ParseContext, ParseResult, ScenarioDiagnostic, ScenarioDocument, SourceDocument,
 };
 
 pub trait ScenarioEngineAdapter: Send + Sync {
@@ -81,20 +82,23 @@ impl ReservedAdapter {
         configs: &[&str],
         tier: LicenseTier,
     ) -> Self {
+        let mut compatible_node_kinds = vec![
+            "request".into(),
+            "wait".into(),
+            "loop".into(),
+            "native".into(),
+        ];
+        if id == "k6" {
+            compatible_node_kinds.extend(["check".into(), "group".into()]);
+        }
+
         Self(EngineAdapterMetadata {
             id: id.into(),
             display_name: display_name.into(),
             license_tier: tier,
             source_kinds: vec![language.into()],
             config_kinds: configs.iter().map(|kind| (*kind).into()).collect(),
-            compatible_node_kinds: vec![
-                "request".into(),
-                "wait".into(),
-                "check".into(),
-                "group".into(),
-                "loop".into(),
-                "native".into(),
-            ],
+            compatible_node_kinds,
         })
     }
 
@@ -119,18 +123,6 @@ impl ReservedAdapter {
     fn k6() -> Self {
         Self::new("k6", "k6", "javascript", &["json"], LicenseTier::Plugin)
     }
-
-    fn unavailable(&self) -> ScenarioDiagnostic {
-        ScenarioDiagnostic {
-            code: "ADAPTER_NOT_READY".into(),
-            severity: DiagnosticSeverity::Error,
-            message: format!(
-                "{} source parsing is not available yet.",
-                self.0.display_name
-            ),
-            span: None,
-        }
-    }
 }
 
 impl ScenarioEngineAdapter for ReservedAdapter {
@@ -151,11 +143,19 @@ impl ScenarioEngineAdapter for ReservedAdapter {
         parse_engine_config(&self.0.id, source)
     }
 
-    fn generate(&self, _: &ScenarioDocument) -> Result<EngineBundle, Vec<ScenarioDiagnostic>> {
-        Err(vec![self.unavailable()])
+    fn generate(
+        &self,
+        document: &ScenarioDocument,
+    ) -> Result<EngineBundle, Vec<ScenarioDiagnostic>> {
+        match self.0.id.as_str() {
+            "locust" => generate_locust(document),
+            "goose" => generate_goose(document),
+            "k6" => generate_k6(document),
+            _ => unreachable!("built-in adapter id is fixed"),
+        }
     }
 
-    fn validate(&self, _: &ScenarioDocument) -> Vec<ScenarioDiagnostic> {
-        vec![]
+    fn validate(&self, document: &ScenarioDocument) -> Vec<ScenarioDiagnostic> {
+        crate::validate_scenario_document(document)
     }
 }
