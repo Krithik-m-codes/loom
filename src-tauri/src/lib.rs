@@ -1,16 +1,17 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use engine_core::*;
 use engine_goose::GooseEngine;
 use engine_k6::K6Engine;
 use engine_locust::LocustEngine;
 use rusqlite::Connection;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use uuid::Uuid;
 
 mod db;
+mod runtime_commands;
 
 // ---------------------------------------------------------------------------
 // App state
@@ -21,6 +22,7 @@ pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
     pub engines: Vec<Box<dyn LoadEngine>>,
     pub active_runs: Arc<Mutex<HashMap<Uuid, tokio::sync::oneshot::Sender<()>>>>,
+    pub runtime_context: Arc<std::sync::RwLock<RuntimeContext>>,
 }
 
 fn script_extension_for_engine(engine: &str) -> &'static str {
@@ -40,7 +42,8 @@ fn validate_suite_engine(engine: &str) -> Result<(), String> {
 }
 
 fn apply_pragmas(conn: &rusqlite::Connection) -> Result<(), String> {
-    conn.execute_batch("PRAGMA foreign_keys = ON;").map_err(|e| e.to_string())
+    conn.execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -90,7 +93,16 @@ struct SuiteWithContent {
 /// List all registered engines and their availability.
 #[tauri::command]
 fn list_engines(state: tauri::State<'_, AppState>) -> Vec<EngineInfo> {
-    state.engines.iter().map(|e| e.info()).collect()
+    let runtime = state
+        .runtime_context
+        .read()
+        .map(|context| context.clone())
+        .unwrap_or_default();
+    state
+        .engines
+        .iter()
+        .map(|e| e.info_with_runtime(&runtime))
+        .collect()
 }
 
 /// Start a load test run.
@@ -109,7 +121,12 @@ async fn start_run(
         .ok_or_else(|| format!("Engine not found: {engine_id}"))?;
 
     // Check availability
-    match engine.detect() {
+    let runtime_context = state
+        .runtime_context
+        .read()
+        .map(|context| context.clone())
+        .unwrap_or_default();
+    match engine.detect_with_runtime(&runtime_context) {
         EngineAvailability::Ready { .. } => {}
         EngineAvailability::NotInstalled { install_hint } => {
             return Err(format!("Engine not installed: {install_hint}"));
@@ -129,7 +146,7 @@ async fn start_run(
 
     // Prepare workspace
     let job = engine
-        .prepare_workspace(&config, &run_dir)
+        .prepare_workspace_with_runtime(&config, &run_dir, &runtime_context)
         .map_err(|e| e.to_string())?;
 
     // Record run in DB
@@ -363,10 +380,7 @@ async fn start_run(
 
 /// Stop a running test.
 #[tauri::command]
-async fn stop_run(
-    state: tauri::State<'_, AppState>,
-    run_id: String,
-) -> Result<(), String> {
+async fn stop_run(state: tauri::State<'_, AppState>, run_id: String) -> Result<(), String> {
     let uuid = Uuid::parse_str(&run_id).map_err(|e| e.to_string())?;
     let mut active = state.active_runs.lock().map_err(|e| e.to_string())?;
 
@@ -387,9 +401,7 @@ async fn stop_run(
 
 /// Get run history from SQLite.
 #[tauri::command]
-fn get_run_history(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<serde_json::Value>, String> {
+fn get_run_history(state: tauri::State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
         .prepare(
@@ -493,13 +505,19 @@ async fn save_script(file_path: String, content: String) -> Result<(), String> {
 fn list_projects(state: tauri::State<'_, AppState>) -> Result<Vec<ProjectRecord>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db.prepare("SELECT id, name, description, target_host, default_engine, created_at, updated_at FROM projects ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok(ProjectRecord {
-            id: row.get(0)?, name: row.get(1)?, description: row.get(2)?,
-            target_host: row.get(3)?, default_engine: row.get(4)?,
-            created_at: row.get(5)?, updated_at: row.get(6)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProjectRecord {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                target_host: row.get(3)?,
+                default_engine: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
@@ -514,8 +532,12 @@ fn create_project(
     let name = name.trim().to_string();
     let target_host = target_host.trim().to_string();
     let description = description.unwrap_or_default().trim().to_string();
-    if name.is_empty() { return Err("Project name must not be empty".into()); }
-    if target_host.is_empty() { return Err("Target host must not be empty".into()); }
+    if name.is_empty() {
+        return Err("Project name must not be empty".into());
+    }
+    if target_host.is_empty() {
+        return Err("Target host must not be empty".into());
+    }
     validate_suite_engine(&default_engine)?;
     let id = format!("proj-{}", Uuid::new_v4());
     let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -858,7 +880,10 @@ async fn delete_suite(
     {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let changed = db
-            .execute("DELETE FROM test_suites WHERE id = ?1", rusqlite::params![id])
+            .execute(
+                "DELETE FROM test_suites WHERE id = ?1",
+                rusqlite::params![id],
+            )
             .map_err(|e| e.to_string())?;
         if changed == 0 {
             return Err(format!("Suite not found: {id}"));
@@ -902,9 +927,11 @@ async fn get_suite(
         )
         .map_err(|_| format!("Suite not found: {id}"))?
     };
-    let script_content = tokio::fs::read_to_string(&script_path).await.unwrap_or_default();
-    let config: TestConfig = serde_json::from_str(&config_json)
-        .map_err(|e| format!("Suite config is corrupt: {e}"))?;
+    let script_content = tokio::fs::read_to_string(&script_path)
+        .await
+        .unwrap_or_default();
+    let config: TestConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("Suite config is corrupt: {e}"))?;
     let visual_nodes: Option<serde_json::Value> = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let nodes_json: Option<String> = db
@@ -936,8 +963,8 @@ fn save_visual_flow(
     suite_id: String,
     nodes_json: String,
 ) -> Result<(), String> {
-    let value: serde_json::Value =
-        serde_json::from_str(&nodes_json).map_err(|_| "Visual flow must be valid JSON".to_string())?;
+    let value: serde_json::Value = serde_json::from_str(&nodes_json)
+        .map_err(|_| "Visual flow must be valid JSON".to_string())?;
     let canonical = serde_json::to_string(&value).map_err(|e| e.to_string())?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.execute(
@@ -957,6 +984,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            let runtime_context = Arc::new(std::sync::RwLock::new(RuntimeContext::default()));
+            let runtime_root = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string());
+            app.manage(runtime_commands::RuntimeCommandState::new(
+                runtime_root,
+                runtime_context.clone(),
+            ));
             // Initialize SQLite database
             let app_data_dir = app
                 .path()
@@ -964,8 +1000,7 @@ pub fn run() {
                 .expect("Could not resolve app data dir");
             std::fs::create_dir_all(&app_data_dir).unwrap();
             let db_path = app_data_dir.join("loom.db");
-            let conn =
-                Connection::open(&db_path).expect("Failed to open SQLite database");
+            let conn = Connection::open(&db_path).expect("Failed to open SQLite database");
 
             apply_pragmas(&conn).expect("Failed to apply SQLite pragmas");
             db::initialize(&conn).expect("Failed to initialize database schema");
@@ -981,6 +1016,7 @@ pub fn run() {
                 db: Arc::new(Mutex::new(conn)),
                 engines,
                 active_runs: Arc::new(Mutex::new(HashMap::new())),
+                runtime_context,
             });
 
             Ok(())
@@ -1003,6 +1039,9 @@ pub fn run() {
             delete_suite,
             get_suite,
             save_visual_flow,
+            runtime_commands::get_runtime_status,
+            runtime_commands::install_runtimes,
+            runtime_commands::cancel_runtime_installation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Loom");
@@ -1029,7 +1068,9 @@ mod ipc_shape_tests {
     fn pragmas_enable_foreign_keys() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         apply_pragmas(&conn).unwrap();
-        let on: i64 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
+        let on: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(on, 1);
     }
 }

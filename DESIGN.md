@@ -4,10 +4,10 @@ description: Dark, local-first engineering console for multi-engine load testing
 colors:
   background: "#070b0a"
   background-secondary: "#0a0f0e"
-  surface: "#0f1410"
-  surface-elevated: "#121a14"
-  border: "#1e2a1f"
-  border-hover: "#2a3a2b"
+  surface: "#0f2918"
+  surface-elevated: "#14331f"
+  border: "#26382b"
+  border-hover: "#35563c"
   primary: "#7cff4d"
   primary-hover: "#96ff70"
   primary-foreground: "#071006"
@@ -21,11 +21,11 @@ colors:
   focus: "#d5ffbe"
 typography:
   body:
-    fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
-    fontSize: "0.875rem"
+    fontFamily: "Inter Variable, Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontSize: "1rem"
     lineHeight: 1.5
   heading:
-    fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Inter Variable, Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "-0.015em"
@@ -111,7 +111,9 @@ The palette is a green-black field with a single high-energy lime action signal 
 
 ## Typography
 
-Inter is the application voice: compact, highly legible, and moderately weighted. The monospace stack is functional, not decorative—use it for code, paths, command-like labels, tabular data, shortcuts, and live process output.
+Inter Variable is bundled with the application so desktop typography is consistent and available offline. Use weights 300, 400, 500, 600, and 700 for light, regular, medium, semibold, and bold emphasis. The monospace stack is functional, not decorative—use it for code, paths, command-like labels, tabular data, shortcuts, and live process output.
+
+The brand reference's typography examples are H1 48/56, H2 32/40, H3 24/32, body 16/24, and caption 14/20 (size/line-height in pixels). The dense desktop workspace maps its page title to a compact role where needed, while preserving the same family and weight hierarchy.
 
 - **Page headings:** compact, semibold, slightly tightened, and balanced for workspace titles.
 - **Section and control labels:** small, durable, and often uppercase with tracked monospace text when identifying technical metadata.

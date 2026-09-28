@@ -8,7 +8,8 @@ use tokio_util::sync::CancellationToken;
 
 const MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
     pub runtime: RuntimeId,
     pub stage: String,

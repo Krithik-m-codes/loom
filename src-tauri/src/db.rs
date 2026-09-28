@@ -57,7 +57,7 @@ pub fn initialize(conn: &Connection) -> Result<()> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_suites_project ON test_suites(project_id);
-        "
+        ",
     )
 }
 
@@ -103,9 +103,14 @@ mod tests {
             [],
         )
         .unwrap();
-        conn.execute("DELETE FROM projects WHERE id = 'p1'", []).unwrap();
-        let suites: i64 = conn.query_row("SELECT COUNT(*) FROM test_suites", [], |r| r.get(0)).unwrap();
-        let flows: i64 = conn.query_row("SELECT COUNT(*) FROM visual_flows", [], |r| r.get(0)).unwrap();
+        conn.execute("DELETE FROM projects WHERE id = 'p1'", [])
+            .unwrap();
+        let suites: i64 = conn
+            .query_row("SELECT COUNT(*) FROM test_suites", [], |r| r.get(0))
+            .unwrap();
+        let flows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM visual_flows", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(suites, 0);
         assert_eq!(flows, 0);
     }

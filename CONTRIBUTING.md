@@ -42,7 +42,9 @@ cargo test --workspace
 
 ---
 
-## 📐 Architecture & License Compliance Rules
+## Architecture & License Compliance Rules
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing IPC, projects, runtimes, or packaging. The React bundle is a local Tauri WebView frontend; it is not the public marketing site and does not require a hosted web service.
 
 Before contributing code, please review Loom's non-negotiable architectural constraints:
 
@@ -51,7 +53,7 @@ Before contributing code, please review Loom's non-negotiable architectural cons
 
 ### 2. License Tiers
 - **Core Tier (`LicenseTier::Core`)**: Permissively licensed adapters (MIT, Apache-2.0, BSD). Loom can distribute adapter code and bundled native worker components.
-- **Plugin Tier (`LicenseTier::Plugin`)**: Copyleft engines (GPL, AGPL, MPL) such as k6. Loom distributes **ONLY** the adapter code, **NEVER** the engine binary. Users must bring their own binary (`BYO binary`).
+- **Plugin Tier (`LicenseTier::Plugin`)**: Copyleft engines such as k6. Loom distributes **ONLY** the adapter code in its application package, **NEVER** the engine binary. An optional direct upstream download is possible only after the user's separate license acceptance; existing user-installed binaries remain supported.
 
 ---
 

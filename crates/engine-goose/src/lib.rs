@@ -65,7 +65,10 @@ impl GooseEngine {
                 if let Ok(v) = val_str.parse::<f64>() {
                     users = Some(v);
                 }
-            } else if part.starts_with("errors:") || part.starts_with("fail:") || part.starts_with("failures:") {
+            } else if part.starts_with("errors:")
+                || part.starts_with("fail:")
+                || part.starts_with("failures:")
+            {
                 let val_str = part.split(':').nth(1).unwrap_or("").trim();
                 if let Ok(v) = val_str.parse::<f64>() {
                     errors = Some(v);
@@ -178,6 +181,16 @@ impl LoadEngine for GooseEngine {
         }
     }
 
+    fn detect_with_runtime(&self, runtime: &RuntimeContext) -> EngineAvailability {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.detect();
+        };
+        match std::process::Command::new(&resolved.executable).arg("--version").envs(&resolved.env).output() {
+            Ok(out) if out.status.success() => EngineAvailability::Ready { version: Some(String::from_utf8_lossy(&out.stdout).trim().to_string()) },
+            _ => EngineAvailability::NotInstalled { install_hint: format!("The Loom-managed Rust toolchain at '{}' is not runnable. Repair it from Engine settings.", resolved.executable.display()) },
+        }
+    }
+
     fn validate_config(&self, cfg: &TestConfig) -> Result<(), EngineError> {
         if cfg.target.host.is_empty() {
             return Err(EngineError::Validation(
@@ -206,7 +219,9 @@ impl LoadEngine for GooseEngine {
         let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
 
         let cargo_path = which::which("cargo").map_err(|_| EngineError::NotInstalled {
-            install_hint: "Install the Rust toolchain from https://rustup.rs/ to run Goose scenarios.".to_string(),
+            install_hint:
+                "Install the Rust toolchain from https://rustup.rs/ to run Goose scenarios."
+                    .to_string(),
         })?;
         if !cfg.script_path.is_file() {
             return Err(EngineError::Validation(format!(
@@ -250,6 +265,55 @@ impl LoadEngine for GooseEngine {
             binary_path: cargo_path,
             args,
             env: HashMap::new(),
+        })
+    }
+
+    fn prepare_workspace_with_runtime(
+        &self,
+        cfg: &TestConfig,
+        run_dir: &Path,
+        runtime: &RuntimeContext,
+    ) -> Result<PreparedJob, EngineError> {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.prepare_workspace(cfg, run_dir);
+        };
+        std::fs::create_dir_all(run_dir)?;
+        let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
+        if !cfg.script_path.is_file() {
+            return Err(EngineError::Validation(format!(
+                "Goose scenario does not exist: {}",
+                cfg.script_path.display()
+            )));
+        }
+        let project_dir = run_dir.join("goose-project");
+        let source_dir = project_dir.join("src");
+        fs::create_dir_all(&source_dir)?;
+        fs::copy(&cfg.script_path, source_dir.join("main.rs"))?;
+        let manifest_path = project_dir.join("Cargo.toml");
+        fs::write(&manifest_path, "[package]\nname = \"loom-goose-scenario\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ngoose = \"0.18\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n")?;
+        let args = vec![
+            "run".into(),
+            "--release".into(),
+            "--manifest-path".into(),
+            manifest_path.to_string_lossy().to_string(),
+            "--".into(),
+            "--host".into(),
+            cfg.target.host.clone(),
+            "--users".into(),
+            cfg.load_profile.users.to_string(),
+            "--hatch-rate".into(),
+            cfg.load_profile.spawn_rate.to_string(),
+            "--run-time".into(),
+            format!("{duration_secs}s"),
+            "--report-file".into(),
+            run_dir.join("report.html").to_string_lossy().to_string(),
+        ];
+        Ok(PreparedJob {
+            run_id: Uuid::new_v4(),
+            work_dir: run_dir.to_path_buf(),
+            binary_path: resolved.executable.clone(),
+            args,
+            env: resolved.env.clone(),
         })
     }
 
@@ -399,12 +463,40 @@ mod tests {
 
         let job = engine.prepare_workspace(&cfg, &run_dir).unwrap();
 
-        assert_eq!(job.binary_path.file_stem().and_then(|name| name.to_str()), Some("cargo"));
-        let manifest_path = run_dir.join("goose-project").join("Cargo.toml").to_string_lossy().to_string();
-        let manifest_index = job.args.iter().position(|arg| arg == "--manifest-path").unwrap();
+        assert_eq!(
+            job.binary_path.file_stem().and_then(|name| name.to_str()),
+            Some("cargo")
+        );
+        let manifest_path = run_dir
+            .join("goose-project")
+            .join("Cargo.toml")
+            .to_string_lossy()
+            .to_string();
+        let manifest_index = job
+            .args
+            .iter()
+            .position(|arg| arg == "--manifest-path")
+            .unwrap();
         assert_eq!(job.args.get(manifest_index + 1), Some(&manifest_path));
         assert!(run_dir.join("goose-project/src/main.rs").exists());
         assert!(run_dir.join("goose-project/Cargo.toml").exists());
+        let managed_cargo = root.join("managed toolchain with spaces").join("cargo");
+        let mut runtime = RuntimeContext::default();
+        runtime.set(
+            "goose",
+            EngineRuntime {
+                executable: managed_cargo.clone(),
+                env: HashMap::from([("CARGO_HOME".into(), "isolated".into())]),
+            },
+        );
+        let managed_job = engine
+            .prepare_workspace_with_runtime(&cfg, &run_dir, &runtime)
+            .unwrap();
+        assert_eq!(managed_job.binary_path, managed_cargo);
+        assert_eq!(
+            managed_job.env.get("CARGO_HOME").map(String::as_str),
+            Some("isolated")
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }

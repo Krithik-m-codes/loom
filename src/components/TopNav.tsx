@@ -156,7 +156,7 @@ export const TopNav = ({
             aria-expanded={navigationOpen} onClick={onToggleNavigation} ref={navigationToggleRef}>
             <Menu aria-hidden="true" size={18} />
           </button>
-          <LoomLogo size={28} showText />
+          <LoomLogo size={28} variant="horizontal" />
           <div className="loom-project-switcher" onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) setProjectMenuOpen(false);
           }}>

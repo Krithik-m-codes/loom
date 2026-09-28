@@ -49,6 +49,7 @@ impl ArtifactProvider for FakeArtifacts {
 struct FakeProcesses {
     calls: Mutex<Vec<(String, Vec<String>, BTreeMap<String, String>)>>,
     wrong_locust_probe: AtomicBool,
+    fail_rustc_link: AtomicBool,
 }
 
 #[async_trait]
@@ -70,6 +71,18 @@ impl ProcessRunner for FakeProcesses {
             std::fs::create_dir_all(program.parent().unwrap()).unwrap();
             std::fs::write(program, b"probe executable").unwrap();
         }
+        let fails_link = name == "rustc"
+            && args.iter().any(|arg| arg == "-o")
+            && self.fail_rustc_link.load(Ordering::SeqCst);
+        if name == "rustc" {
+            if let Some(output_index) = args
+                .iter()
+                .position(|arg| arg == "-o")
+                .and_then(|index| args.get(index + 1))
+            {
+                std::fs::write(output_index, b"linked executable").unwrap();
+            }
+        }
         let output = if name.contains("python") {
             "Python 3.12.14"
         } else if name.contains("locust") && self.wrong_locust_probe.load(Ordering::SeqCst) {
@@ -84,8 +97,8 @@ impl ProcessRunner for FakeProcesses {
             "k6 v2.3.0"
         };
         Ok(ProcessOutput {
-            success: true,
-            code: Some(0),
+            success: !fails_link,
+            code: Some(if fails_link { 1 } else { 0 }),
             stdout: output.into(),
             stderr: String::new(),
         })
@@ -214,13 +227,33 @@ async fn locust_and_goose_are_independently_provisioned_and_persisted() {
     let calls = processes.calls.lock().unwrap();
     assert!(calls
         .iter()
-        .any(|(_, args, env)| args.iter().any(|arg| arg == "3.12.14")
-            && env.contains_key("UV_PYTHON_INSTALL_DIR")));
+        .any(|(_, args, _)| args.iter().any(|arg| arg == "cpython-3.12.14+20260924")));
+    assert!(calls.iter().any(|(_, args, env)| args
+        .iter()
+        .any(|arg| arg == "cpython-3.12.14+20260924")
+        && env.contains_key("UV_PYTHON_INSTALL_DIR")));
+    let root = temp.path().to_string_lossy();
+    assert!(calls.iter().any(|(_, args, env)| {
+        args.iter().any(|arg| arg == "--no-bin")
+            && args.iter().any(|arg| arg == "--no-config")
+            && env
+                .get("UV_CACHE_DIR")
+                .is_some_and(|path| path.starts_with(root.as_ref()))
+            && env
+                .get("UV_PYTHON_BIN_DIR")
+                .is_some_and(|path| path.starts_with(root.as_ref()))
+    }));
     assert!(calls
         .iter()
         .any(|(_, args, env)| args.iter().any(|arg| arg == "1.98.1")
             && env.contains_key("RUSTUP_HOME")
-            && env.contains_key("CARGO_HOME")));
+            && env.contains_key("CARGO_HOME")
+            && env
+                .get("RUSTUP_TOOLCHAIN")
+                .is_some_and(|toolchain| toolchain == "1.98.1")
+            && env
+                .get("RUSTUP_HOME")
+                .is_some_and(|home| home.contains("versions"))));
 }
 
 #[tokio::test]
@@ -295,7 +328,7 @@ async fn failed_locust_install_can_be_retried_without_stale_partial_files() {
 }
 
 #[tokio::test]
-async fn reinstalling_an_active_pinned_runtime_skips_download_and_provisioning() {
+async fn reinstalling_an_active_pinned_runtime_reprobes_before_skipping_download() {
     let temp = tempdir().unwrap();
     let artifacts = Arc::new(FakeArtifacts::default());
     let processes = Arc::new(FakeProcesses::default());
@@ -319,7 +352,10 @@ async fn reinstalling_an_active_pinned_runtime_skips_download_and_provisioning()
         .await;
 
     assert_eq!(artifacts.0.lock().unwrap().len(), 1);
-    assert_eq!(processes.calls.lock().unwrap().len(), first_process_count);
+    assert!(
+        processes.calls.lock().unwrap().len() > first_process_count,
+        "the active runtime must be probed before it is treated as ready"
+    );
 }
 
 #[tokio::test]
@@ -419,7 +455,85 @@ async fn concurrent_installs_for_the_same_runtime_are_serialized() {
         manager.install(selection, None, CancellationToken::new()),
     );
 
-    assert!(first.results[&RuntimeId::Locust].is_ok());
-    assert!(second.results[&RuntimeId::Locust].is_ok());
+    assert!(
+        first.results[&RuntimeId::Locust].is_ok(),
+        "first install: {:?}",
+        first.results[&RuntimeId::Locust]
+    );
+    assert!(
+        second.results[&RuntimeId::Locust].is_ok(),
+        "second install: {:?}",
+        second.results[&RuntimeId::Locust]
+    );
     assert_eq!(artifacts.0.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn separate_managers_sharing_runtime_data_serialize_the_same_install() {
+    let temp = tempdir().unwrap();
+    let artifacts = Arc::new(FakeArtifacts::default());
+    let first_manager = manager(temp.path(), artifacts.clone());
+    let second_manager = manager(temp.path(), artifacts.clone());
+    let selection = InstallSelection {
+        locust: true,
+        goose: false,
+        k6: false,
+    };
+
+    let (first, second) = tokio::join!(
+        first_manager.install(selection, None, CancellationToken::new()),
+        second_manager.install(selection, None, CancellationToken::new()),
+    );
+
+    assert!(
+        first.results[&RuntimeId::Locust].is_ok(),
+        "first install: {:?}",
+        first.results[&RuntimeId::Locust]
+    );
+    assert!(
+        second.results[&RuntimeId::Locust].is_ok(),
+        "second install: {:?}",
+        second.results[&RuntimeId::Locust]
+    );
+    assert_eq!(
+        artifacts.0.lock().unwrap().len(),
+        1,
+        "only the manager that acquires the OS lock should fetch artifacts"
+    );
+}
+
+#[tokio::test]
+async fn goose_is_not_marked_ready_when_native_linker_prerequisites_are_missing() {
+    let temp = tempdir().unwrap();
+    let artifacts = Arc::new(FakeArtifacts::default());
+    let processes = Arc::new(FakeProcesses::default());
+    processes.fail_rustc_link.store(true, Ordering::SeqCst);
+    let manager = RuntimeManager::with_dependencies(
+        temp.path(),
+        PlatformKey::current(),
+        artifacts,
+        processes,
+    );
+    let summary = manager
+        .install(
+            InstallSelection {
+                locust: false,
+                goose: true,
+                k6: false,
+            },
+            None,
+            CancellationToken::new(),
+        )
+        .await;
+
+    let result = summary.results.get(&RuntimeId::Goose).unwrap();
+    assert!(
+        result.is_err(),
+        "Goose must not report Ready when a minimal executable cannot be linked"
+    );
+    assert!(result
+        .as_ref()
+        .unwrap_err()
+        .to_string()
+        .contains("native linker"));
 }

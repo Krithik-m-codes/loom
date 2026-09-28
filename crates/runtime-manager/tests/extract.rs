@@ -1,6 +1,8 @@
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use runtime_manager::{extract_verified, ArchiveFormat};
+use runtime_manager::{
+    extract_verified, extract_verified_with_cancel, ArchiveFormat, InstallError,
+};
 use std::fs;
 use std::io::{Cursor, Write};
 use tar::{Builder, EntryType, Header};
@@ -97,4 +99,24 @@ fn rejects_zip_path_traversal() {
 
     assert!(extract_verified(&archive, ArchiveFormat::Zip, &staging).is_err());
     assert!(!dir.path().join("escaped").exists());
+}
+
+#[test]
+fn cancellation_during_archive_extraction_stops_writes() {
+    let dir = tempdir().unwrap();
+    let archive = dir.path().join("valid.tar.gz");
+    fs::write(
+        &archive,
+        tar_gz_entry("bin/tool", EntryType::Regular, b"tool"),
+    )
+    .unwrap();
+    let staging = dir.path().join("stage");
+    let cancel = tokio_util::sync::CancellationToken::new();
+    cancel.cancel();
+
+    let error = extract_verified_with_cancel(&archive, ArchiveFormat::TarGz, &staging, &cancel)
+        .unwrap_err();
+
+    assert!(matches!(error, InstallError::Cancelled));
+    assert!(!staging.join("bin/tool").exists());
 }

@@ -1,10 +1,13 @@
 use crate::{
-    extract_verified, ArchiveFormat, Artifact, ArtifactId, DownloadProgress, Downloader,
-    InstallError, InstallState, PlatformKey, RuntimeId, RuntimeManifest, RuntimeMetadata,
-    RuntimeStore,
+    extract_verified_with_cancel, ArchiveFormat, Artifact, ArtifactId, DownloadProgress,
+    Downloader, InstallError, InstallState, PlatformKey, RuntimeId, RuntimeManifest,
+    RuntimeMetadata, RuntimeStore,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
+use std::io::ErrorKind;
+use std::process::Stdio;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -105,6 +108,7 @@ impl ArtifactProvider for NativeArtifactProvider {
         cancel: CancellationToken,
     ) -> Result<(), InstallError> {
         tokio::fs::create_dir_all(destination).await?;
+        let extraction_cancel = cancel.clone();
         let archive = self
             .downloader
             .fetch(artifact, destination, runtime, cancel, move |update| {
@@ -136,7 +140,12 @@ impl ArtifactProvider for NativeArtifactProvider {
         let format = artifact.archive_format;
         let destination_path = destination.to_path_buf();
         tokio::task::spawn_blocking(move || {
-            extract_verified(&archive_path, format, &destination_path)
+            extract_verified_with_cancel(
+                &archive_path,
+                format,
+                &destination_path,
+                &extraction_cancel,
+            )
         })
         .await
         .map_err(|error| InstallError::Archive(error.to_string()))??;
@@ -161,18 +170,85 @@ impl ProcessRunner for NativeProcessRunner {
             return Err(InstallError::Cancelled);
         }
         let mut command = Command::new(program);
-        command.args(args).envs(env).kill_on_drop(true);
-        let child = command.output();
-        let output = tokio::select! {
-            _ = cancel.cancelled() => return Err(InstallError::Cancelled),
-            result = child => result.map_err(|error| InstallError::Process(error.to_string()))?,
+        command.env_clear();
+        for (key, value) in std::env::vars_os() {
+            if inherit_environment_key(&key.to_string_lossy()) {
+                command.env(key, value);
+            }
+        }
+        command
+            .args(args)
+            .envs(env)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.as_std_mut().process_group(0);
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|error| InstallError::Process(error.to_string()))?;
+        let child_id = child.id();
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let stdout_task = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            if let Some(mut stdout) = stdout {
+                tokio::io::AsyncReadExt::read_to_end(&mut stdout, &mut bytes).await?;
+            }
+            Ok::<_, std::io::Error>(bytes)
+        });
+        let stderr_task = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            if let Some(mut stderr) = stderr {
+                tokio::io::AsyncReadExt::read_to_end(&mut stderr, &mut bytes).await?;
+            }
+            Ok::<_, std::io::Error>(bytes)
+        });
+        let status = tokio::select! {
+            _ = cancel.cancelled() => {
+                if let Some(child_id) = child_id {
+                    terminate_process_tree(child_id).await;
+                }
+                let _ = child.start_kill();
+                let _ = child.wait().await;
+                stdout_task.abort();
+                stderr_task.abort();
+                return Err(InstallError::Cancelled);
+            }
+            result = child.wait() => result.map_err(|error| InstallError::Process(error.to_string()))?,
         };
+        let stdout = stdout_task
+            .await
+            .map_err(|error| InstallError::Process(error.to_string()))?
+            .map_err(InstallError::from)?;
+        let stderr = stderr_task
+            .await
+            .map_err(|error| InstallError::Process(error.to_string()))?
+            .map_err(InstallError::from)?;
         Ok(ProcessOutput {
-            success: output.status.success(),
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            success: status.success(),
+            code: status.code(),
+            stdout: String::from_utf8_lossy(&stdout).trim().to_string(),
+            stderr: String::from_utf8_lossy(&stderr).trim().to_string(),
         })
+    }
+}
+
+async fn terminate_process_tree(process_id: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(process_id as i32), libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let process_id = process_id.to_string();
+        let _ = Command::new("taskkill.exe")
+            .args(["/PID", process_id.as_str(), "/T", "/F"])
+            .status()
+            .await;
     }
 }
 
@@ -223,6 +299,10 @@ impl RuntimeManager {
     ) -> InstallSummary {
         self.install_with_progress(selection, k6_consent, None, cancel)
             .await
+    }
+
+    pub fn status(&self, runtime: RuntimeId) -> Result<InstallState, RuntimeError> {
+        self.store.status(runtime).map_err(RuntimeError::from)
     }
 
     pub async fn install_with_progress(
@@ -281,6 +361,7 @@ impl RuntimeManager {
             _ = cancel.cancelled() => return Err(RuntimeError::Install(InstallError::Cancelled)),
             guard = lock.lock() => guard,
         };
+        let _cross_process_guard = self.acquire_process_lock(runtime, &cancel).await?;
         if !self.platform.is_supported() {
             return Err(RuntimeError::UnsupportedPlatform);
         }
@@ -296,7 +377,7 @@ impl RuntimeManager {
                 .to_string(),
         };
         if let InstallState::Ready { version, .. } = self.store.status(runtime)? {
-            if version == expected_version {
+            if version == expected_version && self.verify_active_runtime(runtime, &cancel).await? {
                 return Ok(self.store.status(runtime)?);
             }
         }
@@ -336,18 +417,147 @@ impl RuntimeManager {
         result.map_err(RuntimeError::from)
     }
 
-    fn remove_incomplete_version(&self, runtime: RuntimeId, version: &str) {
-        if matches!(self.store.status(runtime), Ok(InstallState::Ready { version: active, .. }) if active == version)
-        {
-            return;
-        }
-        let directory = match runtime {
-            RuntimeId::Locust | RuntimeId::Goose => {
-                self.runtime_dir(runtime).join("versions").join(version)
-            }
-            RuntimeId::K6 => return,
+    async fn verify_active_runtime(
+        &self,
+        runtime: RuntimeId,
+        cancel: &CancellationToken,
+    ) -> Result<bool, RuntimeError> {
+        let resolved = match self.resolve(runtime) {
+            Ok(resolved) => resolved,
+            Err(_) => return Ok(false),
         };
-        let _ = std::fs::remove_dir_all(directory);
+        let probes: Vec<(PathBuf, String, String)> = match runtime {
+            RuntimeId::Locust => {
+                let Some(parent) = resolved.executable.parent() else {
+                    return Ok(false);
+                };
+                vec![
+                    (
+                        parent.join(exe_name("python")),
+                        "--version".into(),
+                        RuntimeManifest::locust().python_version.into(),
+                    ),
+                    (
+                        resolved.executable.clone(),
+                        "--version".into(),
+                        RuntimeManifest::locust().locust_version.into(),
+                    ),
+                ]
+            }
+            RuntimeId::Goose => {
+                let Some(parent) = resolved.executable.parent() else {
+                    return Ok(false);
+                };
+                vec![
+                    (
+                        resolved.executable.clone(),
+                        "--version".into(),
+                        RuntimeManifest::goose().rust_toolchain.into(),
+                    ),
+                    (
+                        parent.join(exe_name("rustc")),
+                        "--version".into(),
+                        RuntimeManifest::goose().rust_toolchain.into(),
+                    ),
+                ]
+            }
+            RuntimeId::K6 => {
+                let artifact = RuntimeManifest::artifact(ArtifactId::K6, self.platform)
+                    .map_err(|_| RuntimeError::UnsupportedPlatform)?;
+                vec![(
+                    resolved.executable.clone(),
+                    "version".into(),
+                    artifact.version.into(),
+                )]
+            }
+        };
+        for (program, flag, expected) in probes {
+            match self
+                .probe_version(
+                    &program,
+                    &resolved.env,
+                    &flag,
+                    &expected,
+                    cancel.child_token(),
+                )
+                .await
+            {
+                Ok(()) => {}
+                Err(InstallError::Cancelled) => return Err(InstallError::Cancelled.into()),
+                Err(_) => return Ok(false),
+            }
+        }
+        Ok(true)
+    }
+
+    async fn acquire_process_lock(
+        &self,
+        runtime: RuntimeId,
+        cancel: &CancellationToken,
+    ) -> Result<File, RuntimeError> {
+        let runtime_dir = self.runtime_dir(runtime);
+        tokio::fs::create_dir_all(&runtime_dir)
+            .await
+            .map_err(InstallError::from)?;
+        let lock_path = runtime_dir.join("install.lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(InstallError::from)?;
+        loop {
+            match fs2::FileExt::try_lock_exclusive(&file) {
+                Ok(()) => return Ok(file),
+                Err(error) if is_lock_contention(&error) => {
+                    tokio::select! {
+                        _ = cancel.cancelled() => return Err(InstallError::Cancelled.into()),
+                        _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+                    }
+                }
+                Err(error) => {
+                    return Err(InstallError::Store(format!(
+                        "runtime install lock failed: {error}"
+                    ))
+                    .into())
+                }
+            }
+        }
+    }
+
+    fn remove_incomplete_version(&self, runtime: RuntimeId, version: &str) {
+        let versions = self.runtime_dir(runtime).join("versions");
+        let active_executable = match self.store.status(runtime) {
+            Ok(InstallState::Ready {
+                version: active_version,
+                path,
+            }) if active_version == version => Some(PathBuf::from(path)),
+            _ => None,
+        };
+        let Ok(entries) = std::fs::read_dir(&versions) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !entry.file_name().to_string_lossy().starts_with(version) {
+                continue;
+            }
+            if active_executable
+                .as_ref()
+                .is_some_and(|executable| executable.starts_with(&path))
+            {
+                continue;
+            }
+            match std::fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+                    let _ = std::fs::remove_dir_all(path);
+                }
+                Ok(_) => {
+                    let _ = std::fs::remove_file(path);
+                }
+                Err(_) => {}
+            }
+        }
     }
 
     async fn provision_locust(
@@ -358,14 +568,6 @@ impl RuntimeManager {
     ) -> Result<InstallState, InstallError> {
         let pin = RuntimeManifest::locust();
         let version = format!("{}-locust-{}", pin.python_build, pin.locust_version);
-        if let InstallState::Ready {
-            version: active, ..
-        } = self.store.status(RuntimeId::Locust)?
-        {
-            if active == version {
-                return self.store.status(RuntimeId::Locust);
-            }
-        }
         let runtime_dir = self.runtime_dir(RuntimeId::Locust);
         let artifact = RuntimeManifest::artifact(ArtifactId::UvBootstrap, self.platform)
             .map_err(|e| InstallError::Download(e.to_string()))?;
@@ -382,7 +584,10 @@ impl RuntimeManager {
         }
         tokio::fs::copy(acquired, &uv_path).await?;
 
-        let version_dir = runtime_dir.join("versions").join(&version);
+        let version_dir =
+            runtime_dir
+                .join("versions")
+                .join(format!("{}-{}", version, uuid::Uuid::new_v4()));
         tokio::fs::create_dir_all(&version_dir).await?;
         let python_home = version_dir.join("python");
         let venv = version_dir.join("venv");
@@ -397,13 +602,30 @@ impl RuntimeManager {
             "UV_PYTHON_INSTALL_DIR".into(),
             python_home.to_string_lossy().into_owned(),
         );
+        env.insert(
+            "UV_PYTHON_BIN_DIR".into(),
+            python_home.join("bin").to_string_lossy().into_owned(),
+        );
+        env.insert(
+            "UV_CACHE_DIR".into(),
+            runtime_dir.join("cache").to_string_lossy().into_owned(),
+        );
+        let uv_temp = runtime_dir.join("tmp");
+        tokio::fs::create_dir_all(&uv_temp).await?;
+        env.insert("TMPDIR".into(), uv_temp.to_string_lossy().into_owned());
+        env.insert("TMP".into(), uv_temp.to_string_lossy().into_owned());
+        env.insert("TEMP".into(), uv_temp.to_string_lossy().into_owned());
+        env.insert("UV_PYTHON_INSTALL_REGISTRY".into(), "0".into());
         self.run_checked(
             &uv_path,
             &[
+                "--no-config".into(),
                 "python".into(),
                 "install".into(),
-                pin.python_version.into(),
+                pin.python_build.into(),
                 "--managed-python".into(),
+                "--no-bin".into(),
+                "--no-registry".into(),
                 "--install-dir".into(),
                 python_home.to_string_lossy().into_owned(),
             ],
@@ -414,9 +636,10 @@ impl RuntimeManager {
         self.run_checked(
             &uv_path,
             &[
+                "--no-config".into(),
                 "venv".into(),
                 "--python".into(),
-                pin.python_version.into(),
+                pin.python_build.into(),
                 "--managed-python".into(),
                 venv.to_string_lossy().into_owned(),
             ],
@@ -437,6 +660,7 @@ impl RuntimeManager {
         self.run_checked(
             &uv_path,
             &[
+                "--no-config".into(),
                 "pip".into(),
                 "install".into(),
                 "--python".into(),
@@ -486,14 +710,14 @@ impl RuntimeManager {
         cancel: CancellationToken,
     ) -> Result<InstallState, InstallError> {
         let pin = RuntimeManifest::goose();
-        if let InstallState::Ready { version, .. } = self.store.status(RuntimeId::Goose)? {
-            if version == pin.rust_toolchain {
-                return self.store.status(RuntimeId::Goose);
-            }
-        }
         let runtime_dir = self.runtime_dir(RuntimeId::Goose);
-        let rustup_home = runtime_dir.join("rustup");
-        let cargo_home = runtime_dir.join("versions").join(&pin.rust_toolchain);
+        let attempt_dir = runtime_dir.join("versions").join(format!(
+            "{}-{}",
+            pin.rust_toolchain,
+            uuid::Uuid::new_v4()
+        ));
+        let rustup_home = attempt_dir.join("rustup");
+        let cargo_home = attempt_dir.join("cargo");
         tokio::fs::create_dir_all(&rustup_home).await?;
         tokio::fs::create_dir_all(&cargo_home).await?;
         let artifact = RuntimeManifest::artifact(ArtifactId::RustupBootstrap, self.platform)
@@ -510,6 +734,7 @@ impl RuntimeManager {
                 "CARGO_HOME".into(),
                 cargo_home.to_string_lossy().into_owned(),
             ),
+            ("RUSTUP_TOOLCHAIN".into(), pin.rust_toolchain.into()),
         ]);
         emit_progress(
             &progress,
@@ -549,9 +774,38 @@ impl RuntimeManager {
             cancel.child_token(),
         )
         .await?;
+        let linker_source = stage.join("loom-linker-check.rs");
+        let linker_output = stage.join(exe_name("loom-linker-check"));
+        tokio::fs::write(&linker_source, "fn main() {}\n").await?;
+        let link_result = self
+            .run_checked(
+                &rustc,
+                &[
+                    "--edition=2021".into(),
+                    linker_source.to_string_lossy().into_owned(),
+                    "-o".into(),
+                    linker_output.to_string_lossy().into_owned(),
+                ],
+                &env,
+                cancel.child_token(),
+            )
+            .await;
+        if let Err(error) = link_result {
+            if matches!(error, InstallError::Cancelled) {
+                return Err(error);
+            }
+            return Err(InstallError::Process(format!(
+                "Rust is installed, but Goose cannot build because native linker prerequisites are missing or misconfigured. Install the platform's compiler/linker components (MSVC + Windows SDK, Xcode Command Line Tools, or a Linux C toolchain), then retry. Details: {error}"
+            )));
+        }
+        if !linker_output.is_file() {
+            return Err(InstallError::Process(
+                "Rust compiler exited successfully but produced no linker-check executable; Goose cannot be marked Ready".into(),
+            ));
+        }
         self.store.activate_existing(
             RuntimeId::Goose,
-            &cargo_home,
+            &attempt_dir,
             RuntimeMetadata {
                 version: pin.rust_toolchain.into(),
                 executable_path: path_from_runtime(&runtime_dir, &cargo)?,
@@ -568,14 +822,6 @@ impl RuntimeManager {
         let artifact = RuntimeManifest::artifact(ArtifactId::K6, self.platform)
             .map_err(|e| InstallError::Download(e.to_string()))?;
         let version = artifact.version.to_string();
-        if let InstallState::Ready {
-            version: active, ..
-        } = self.store.status(RuntimeId::K6)?
-        {
-            if active == version {
-                return self.store.status(RuntimeId::K6);
-            }
-        }
         let executable = stage.join(crate::extract::checked_relative(Path::new(
             artifact.executable_path,
         ))?);
@@ -589,12 +835,21 @@ impl RuntimeManager {
             cancel,
         )
         .await?;
-        self.store.activate(
+        let runtime_dir = self.runtime_dir(RuntimeId::K6);
+        let version_dir =
+            runtime_dir
+                .join("versions")
+                .join(format!("{}-{}", version, uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&version_dir).await?;
+        let installed_executable = version_dir.join(exe_name("k6"));
+        tokio::fs::copy(&executable, &installed_executable).await?;
+        set_executable(&installed_executable)?;
+        self.store.activate_existing(
             RuntimeId::K6,
-            stage,
+            &version_dir,
             RuntimeMetadata {
                 version,
-                executable_path: artifact.executable_path.into(),
+                executable_path: path_from_runtime(&runtime_dir, &installed_executable)?,
             },
         )
     }
@@ -650,19 +905,21 @@ impl RuntimeManager {
             InstallState::Ready { version, path } => {
                 let mut env = BTreeMap::new();
                 if runtime == RuntimeId::Goose {
-                    let runtime_dir = self.runtime_dir(runtime);
+                    let executable = PathBuf::from(&path);
+                    let cargo_home = executable
+                        .parent()
+                        .and_then(Path::parent)
+                        .ok_or(RuntimeError::Missing)?;
+                    let toolchain_home = cargo_home.parent().ok_or(RuntimeError::Missing)?;
                     env.insert(
                         "RUSTUP_HOME".into(),
-                        runtime_dir.join("rustup").to_string_lossy().into_owned(),
+                        toolchain_home.join("rustup").to_string_lossy().into_owned(),
                     );
                     env.insert(
                         "CARGO_HOME".into(),
-                        runtime_dir
-                            .join("versions")
-                            .join(&version)
-                            .to_string_lossy()
-                            .into_owned(),
+                        cargo_home.to_string_lossy().into_owned(),
                     );
+                    env.insert("RUSTUP_TOOLCHAIN".into(), version.clone());
                 }
                 Ok(ResolvedRuntime {
                     executable: PathBuf::from(path),
@@ -695,6 +952,11 @@ impl RuntimeManager {
         crate::store::replace_file(&temporary, &path)?;
         Ok(())
     }
+}
+
+fn is_lock_contention(error: &std::io::Error) -> bool {
+    error.kind() == ErrorKind::WouldBlock
+        || (cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33)))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -749,6 +1011,44 @@ fn set_executable(path: &Path) -> Result<(), InstallError> {
     Ok(())
 }
 
+fn inherit_environment_key(key: &str) -> bool {
+    let key = key.to_ascii_uppercase();
+    if key.starts_with("UV_")
+        || key.starts_with("RUSTUP_")
+        || key.starts_with("CARGO_")
+        || key.starts_with("PYTHON")
+        || key.starts_with("PIP_")
+    {
+        return false;
+    }
+    matches!(
+        key.as_str(),
+        "PATH"
+            | "HOME"
+            | "USERPROFILE"
+            | "APPDATA"
+            | "LOCALAPPDATA"
+            | "SYSTEMROOT"
+            | "WINDIR"
+            | "SYSTEMDRIVE"
+            | "HOMEDRIVE"
+            | "HOMEPATH"
+            | "TEMP"
+            | "TMP"
+            | "TMPDIR"
+            | "HTTP_PROXY"
+            | "HTTPS_PROXY"
+            | "ALL_PROXY"
+            | "NO_PROXY"
+            | "SSL_CERT_FILE"
+            | "SSL_CERT_DIR"
+            | "LANG"
+            | "LC_ALL"
+            | "LC_CTYPE"
+            | "TERM"
+    ) || key.starts_with("LC_")
+}
+
 fn find_runtime_on_path(
     runtime: RuntimeId,
     paths: impl IntoIterator<Item = PathBuf>,
@@ -799,6 +1099,115 @@ mod resolver_tests {
         assert_eq!(
             find_runtime_on_path(RuntimeId::Goose, [temp.path().to_path_buf()], true),
             Some(executable)
+        );
+    }
+
+    #[test]
+    fn child_environment_filters_runtime_and_registry_overrides_but_keeps_platform_access() {
+        assert!(!inherit_environment_key("UV_PYTHON_DOWNLOADS_JSON_URL"));
+        assert!(!inherit_environment_key("UV_INDEX_URL"));
+        assert!(!inherit_environment_key("RUSTUP_DIST_SERVER"));
+        assert!(!inherit_environment_key("RUSTUP_TOOLCHAIN"));
+        assert!(!inherit_environment_key("CARGO_HOME"));
+        assert!(inherit_environment_key("PATH"));
+        assert!(inherit_environment_key("SystemRoot"));
+        assert!(inherit_environment_key("HTTPS_PROXY"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancelling_a_process_also_terminates_its_child_processes() {
+        let root = tempdir().unwrap();
+        let pid_file = root.path().join("child.pid");
+        let script = format!("sleep 30 & echo $! > '{}' ; wait", pid_file.display());
+        let cancellation = CancellationToken::new();
+        let runner = Arc::new(NativeProcessRunner);
+        let process_cancel = cancellation.clone();
+        let task = tokio::spawn(async move {
+            runner
+                .run(
+                    Path::new("/bin/sh"),
+                    &["-c".into(), script],
+                    &BTreeMap::new(),
+                    process_cancel,
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while !pid_file.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let child_pid: i32 = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        cancellation.cancel();
+        assert!(matches!(task.await.unwrap(), Err(InstallError::Cancelled)));
+        let mut terminated = false;
+        for _ in 0..100 {
+            if unsafe { libc::kill(child_pid, 0) } != 0 {
+                terminated = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        if !terminated {
+            unsafe {
+                libc::kill(child_pid, libc::SIGKILL);
+            }
+        }
+        assert!(terminated, "cancelled process left its child running");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn cancelling_a_windows_process_tree_terminates_its_child_processes() {
+        let root = tempdir().unwrap();
+        let pid_file = root.path().join("child.pid");
+        let script = format!(
+            "$child = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-Command','Start-Sleep -Seconds 30') -PassThru; $child.Id | Set-Content -LiteralPath '{}'; Wait-Process -Id $child.Id",
+            pid_file.display()
+        );
+        let cancellation = CancellationToken::new();
+        let runner = Arc::new(NativeProcessRunner);
+        let process_cancel = cancellation.clone();
+        let task = tokio::spawn(async move {
+            runner
+                .run(
+                    Path::new("powershell.exe"),
+                    &["-NoProfile".into(), "-Command".into(), script],
+                    &BTreeMap::new(),
+                    process_cancel,
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            while !pid_file.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let child_pid: u32 = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        cancellation.cancel();
+        assert!(matches!(task.await.unwrap(), Err(InstallError::Cancelled)));
+        let query = tokio::process::Command::new("tasklist.exe")
+            .args(["/FI", &format!("PID eq {child_pid}"), "/FO", "CSV", "/NH"])
+            .output()
+            .await
+            .unwrap();
+        let output = String::from_utf8_lossy(&query.stdout);
+        assert!(
+            !output.contains(&child_pid.to_string()),
+            "cancelled installer left child process {child_pid} running"
         );
     }
 }

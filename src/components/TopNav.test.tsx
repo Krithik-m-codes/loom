@@ -43,7 +43,7 @@ describe("TopNav", () => {
     const secondProject = { ...project, id: "inventory", name: "Inventory" };
     render(<TopNav {...createProps({ projects: [project, secondProject], onSelectProject, onOpenNewProject })} />);
 
-    const brand = screen.getByRole("img", { name: "Loom" });
+    const brand = screen.getByText("Loom");
     const picker = screen.getByRole("button", { name: /Billing/ });
     expect(brand.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await user.click(picker);

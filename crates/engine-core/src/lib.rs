@@ -79,6 +79,32 @@ pub struct PreparedJob {
     pub env: HashMap<String, String>,
 }
 
+/// Runtime executables resolved by Loom's managed runtime manager.
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeContext {
+    runtimes: HashMap<String, EngineRuntime>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EngineRuntime {
+    pub executable: PathBuf,
+    pub env: HashMap<String, String>,
+}
+
+impl RuntimeContext {
+    pub fn set(&mut self, engine: impl Into<String>, runtime: EngineRuntime) {
+        self.runtimes.insert(engine.into(), runtime);
+    }
+
+    pub fn get(&self, engine: &str) -> Option<&EngineRuntime> {
+        self.runtimes.get(engine)
+    }
+
+    pub fn clear(&mut self) {
+        self.runtimes.clear();
+    }
+}
+
 /// Handle to a running subprocess.
 pub struct RunHandle {
     pub run_id: Uuid,
@@ -208,11 +234,30 @@ pub trait LoadEngine: Send + Sync {
     /// Plugin engines call this before ever offering themselves as runnable.
     fn detect(&self) -> EngineAvailability;
 
+    /// Detect using Loom's resolved runtime first, then the adapter's default discovery.
+    fn detect_with_runtime(&self, _runtime: &RuntimeContext) -> EngineAvailability {
+        self.detect()
+    }
+
     /// Validate a test configuration before attempting to run it.
     fn validate_config(&self, cfg: &TestConfig) -> Result<(), EngineError>;
 
     /// Prepare a workspace directory with everything needed to launch the test.
-    fn prepare_workspace(&self, cfg: &TestConfig, run_dir: &Path) -> Result<PreparedJob, EngineError>;
+    fn prepare_workspace(
+        &self,
+        cfg: &TestConfig,
+        run_dir: &Path,
+    ) -> Result<PreparedJob, EngineError>;
+
+    /// Prepare a job with Loom's resolved executable/environment when available.
+    fn prepare_workspace_with_runtime(
+        &self,
+        cfg: &TestConfig,
+        run_dir: &Path,
+        _runtime: &RuntimeContext,
+    ) -> Result<PreparedJob, EngineError> {
+        self.prepare_workspace(cfg, run_dir)
+    }
 
     /// Spawn the engine as a subprocess. Always a subprocess — see trait doc.
     async fn launch(&self, job: &PreparedJob) -> Result<RunHandle, EngineError>;
@@ -221,7 +266,10 @@ pub trait LoadEngine: Send + Sync {
     /// For Locust: polls stats_stats_history.csv on a 1s timer.
     /// For Goose: parses stdout.
     /// For k6: tails JSON output file.
-    fn stream_metrics(&self, handle: &mut RunHandle) -> BoxStream<'_, Result<NormalizedMetric, EngineError>>;
+    fn stream_metrics(
+        &self,
+        handle: &mut RunHandle,
+    ) -> BoxStream<'_, Result<NormalizedMetric, EngineError>>;
 
     /// Stop the running engine (send termination signal) and return a summary.
     async fn stop(&self, handle: &mut RunHandle) -> Result<RunSummary, EngineError>;
@@ -237,9 +285,19 @@ pub trait LoadEngine: Send + Sync {
             engine_language: self.engine_language().to_string(),
             license: self.license().to_string(),
             license_tier: self.license_tier(),
-            supported_script_languages: self.supported_script_languages().iter().map(|s| s.to_string()).collect(),
+            supported_script_languages: self
+                .supported_script_languages()
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             availability: self.detect(),
         }
+    }
+
+    fn info_with_runtime(&self, runtime: &RuntimeContext) -> EngineInfo {
+        let mut info = self.info();
+        info.availability = self.detect_with_runtime(runtime);
+        info
     }
 }
 
@@ -263,7 +321,9 @@ pub fn parse_duration_secs(s: &str) -> Result<u64, EngineError> {
         "s" => Ok(num),
         "m" => Ok(num * 60),
         "h" => Ok(num * 3600),
-        _ => Err(EngineError::Validation(format!("Unknown duration unit: {unit}"))),
+        _ => Err(EngineError::Validation(format!(
+            "Unknown duration unit: {unit}"
+        ))),
     }
 }
 

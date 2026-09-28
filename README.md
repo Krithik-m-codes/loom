@@ -18,11 +18,13 @@ Loom adapters always invoke engines through a subprocess boundary. Loom does not
 
 | Engine | Script language | Runtime prerequisite |
 | --- | --- | --- |
-| Locust | Python | Python 3.10+ and `pip install locust` |
-| Goose | Rust | Rust toolchain; Loom compiles each scenario as an external Cargo application |
-| k6 | JavaScript | A user-provided k6 binary on `PATH` |
+| Locust | Python | Loom can provision pinned Python + Locust in user data, or use an existing PATH install |
+| Goose | Rust | Loom can provision a pinned Rust toolchain; native linker/build prerequisites may still be OS-provided |
+| k6 | JavaScript | Optional official runtime download after separate AGPL consent, or a user-provided k6 binary |
 
-k6 is an AGPL-licensed plugin-tier engine. Loom distributes adapter code only; it does not redistribute the k6 binary. See [LICENSES.md](LICENSES.md) for attribution details.
+k6 is an AGPL-licensed plugin-tier engine. Loom never bundles it in the desktop package; a user may choose to download it from its official upstream release after separate AGPL acceptance. See [LICENSES.md](LICENSES.md) for attribution details.
+
+On first launch, accept Loom's terms, then choose Locust and Goose (selected by default) and optionally k6. Runtime installation is separate from the desktop installer so the same user-scope flow works on Windows, macOS, and Linux. A failed or skipped engine does not block creating projects or suites. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for desktop/WebView, project-data, and runtime boundaries.
 
 ## Local development
 

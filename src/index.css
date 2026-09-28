@@ -22,10 +22,10 @@
   .dark {
     --loom-bg: #070b0a;
     --loom-bg-secondary: #0a0f0e;
-    --loom-surface: #0f1410;
-    --loom-surface-elevated: #121a14;
-    --loom-border: #1e2a1f;
-    --loom-border-hover: #2a3a2b;
+    --loom-surface: #0f2918;
+    --loom-surface-elevated: #14331f;
+    --loom-border: #26382b;
+    --loom-border-hover: #35563c;
     --loom-primary: #7cff4d;
     --loom-primary-hover: #96ff70;
     --loom-primary-foreground: #071006;
@@ -62,42 +62,42 @@
      * canonical Loom tokens above and are removed as semantic classes replace
      * the legacy utilities.
      */
-    --background: 160 22% 3%;
-    --foreground: 120 100% 95%;
-    --surface: 120 14% 7%;
-    --surface-foreground: 120 100% 95%;
-    --surface-raised: 120 16% 9%;
-    --surface-raised-foreground: 120 100% 95%;
-    --card: 120 14% 7%;
-    --card-foreground: 120 100% 95%;
-    --popover: 120 16% 9%;
-    --popover-foreground: 120 100% 95%;
-    --border: 120 15% 14%;
-    --border-strong: 120 16% 20%;
-    --input: 120 15% 14%;
-    --ring: 101 100% 65%;
-    --muted: 120 14% 7%;
-    --muted-foreground: 105 7% 64%;
-    --faint-foreground: 105 5% 42%;
-    --accent: 101 100% 65%;
-    --accent-hover: 101 100% 72%;
+    --background: 165 22.2% 3.5%;
+    --foreground: 120 100% 95.1%;
+    --surface: 141 46.4% 11%;
+    --surface-foreground: 120 100% 95.1%;
+    --surface-raised: 141 43.7% 13.9%;
+    --surface-raised-foreground: 120 100% 95.1%;
+    --card: 141 46.4% 11%;
+    --card-foreground: 120 100% 95.1%;
+    --popover: 141 43.7% 13.9%;
+    --popover-foreground: 120 100% 95.1%;
+    --border: 137 19.1% 18.4%;
+    --border-strong: 133 23.7% 27.3%;
+    --input: 137 19.1% 18.4%;
+    --ring: 104 100% 65.1%;
+    --muted: 168 20% 4.9%;
+    --muted-foreground: 120 6.5% 63.5%;
+    --faint-foreground: 120 6.3% 53.5%;
+    --accent: 104 100% 65.1%;
+    --accent-hover: 104 100% 72%;
     --accent-foreground: 120 37% 4%;
-    --accent-dim: 101 100% 65%;
-    --primary: 101 100% 65%;
+    --accent-dim: 104 100% 65.1%;
+    --primary: 104 100% 65.1%;
     --primary-foreground: 120 37% 4%;
-    --secondary: 120 16% 9%;
-    --secondary-foreground: 120 100% 95%;
-    --success: 142 71% 45%;
+    --secondary: 141 43.7% 13.9%;
+    --secondary-foreground: 120 100% 95.1%;
+    --success: 142 70.6% 45.3%;
     --success-foreground: 120 37% 4%;
     --warning: 38 92% 50%;
     --warning-foreground: 120 37% 4%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 120 100% 95%;
-    --live: 142 71% 45%;
+    --destructive-foreground: 120 100% 95.1%;
+    --live: 142 70.6% 45.3%;
     --radius: var(--loom-radius-small);
     --radius-sm: var(--loom-radius-small);
     --radius-lg: var(--loom-radius-control);
-    --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     --loom-font-mono: var(--font-mono);
     --duration-fast: var(--loom-motion-fast);
@@ -128,7 +128,7 @@
     overflow: hidden;
     background: var(--loom-bg);
     color: var(--loom-text);
-    font-size: 0.875rem;
+    font-size: 1rem;
     line-height: 1.5;
     font-feature-settings: "cv11", "ss01";
   }
@@ -185,11 +185,13 @@
   }
 
   .loom-heading--page {
-    font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+    font-size: clamp(1.75rem, 1.5rem + 0.8vw, 2rem);
+    line-height: 1.25;
   }
 
   .loom-heading--section {
-    font-size: 1rem;
+    font-size: 1.5rem;
+    line-height: 1.333;
   }
 
   .loom-heading--label {
@@ -273,6 +275,11 @@
   gap: 0.625rem;
 }
 
+.loom-logo--stacked {
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
 .loom-logo__mark {
   display: block;
   object-fit: contain;
@@ -281,21 +288,18 @@
 .loom-logo__lockup {
   display: grid;
   min-width: 0;
-  gap: 0.125rem;
   line-height: 1;
+}
+
+.loom-logo--stacked .loom-logo__lockup {
+  justify-items: center;
 }
 
 .loom-logo__wordmark {
   color: var(--loom-text);
   font-size: 1rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.02em;
-}
-
-.loom-logo__descriptor {
-  color: var(--loom-text-secondary);
-  font-size: 0.6875rem;
-  font-weight: 500;
 }
 
 .loom-page {
@@ -523,7 +527,7 @@
   overflow: hidden;
   color: var(--loom-text);
   font-size: clamp(1.375rem, 1.1rem + 0.6vw, 1.875rem);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -770,6 +774,154 @@
   align-items: center;
 }
 
+.loom-runtime-setup {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.loom-runtime-setup__intro p {
+  margin: 8px 0 0;
+  color: var(--loom-text-secondary);
+}
+
+.loom-runtime-setup__engines {
+  display: grid;
+  gap: 8px;
+}
+
+.loom-runtime-setup__engine {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 11px 13px;
+  border: 1px solid var(--loom-border);
+  border-radius: var(--loom-radius-control);
+  background: var(--loom-surface);
+  cursor: pointer;
+}
+
+.loom-runtime-setup__engine:hover:not([data-ready="true"]) {
+  border-color: var(--loom-border-hover);
+  background: var(--loom-surface-elevated);
+}
+
+.loom-runtime-setup__engine input,
+.loom-runtime-setup__license input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--loom-primary);
+}
+
+.loom-runtime-setup__engine-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.loom-runtime-setup__engine-copy small {
+  color: var(--loom-text-secondary);
+  font-size: 12px;
+}
+
+.loom-runtime-setup__state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--loom-text-muted);
+  font-size: 12px;
+}
+
+.loom-runtime-setup__engine[data-ready="true"] .loom-runtime-setup__state {
+  color: var(--loom-green);
+}
+
+.loom-runtime-setup__license {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--loom-border);
+  border-radius: var(--loom-radius-control);
+  color: var(--loom-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.loom-runtime-setup__progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--loom-border);
+  border-radius: var(--loom-radius-control);
+  background: var(--loom-bg-secondary);
+}
+
+.loom-runtime-setup__progress > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.loom-runtime-setup__progress > div span {
+  overflow: hidden;
+  color: var(--loom-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loom-runtime-setup__progress progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--loom-primary);
+}
+
+.loom-runtime-setup__error {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--loom-warning);
+  font-size: 12px;
+}
+
+.loom-runtime-setup__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.loom-engines__runtime-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--loom-border);
+  border-radius: var(--loom-radius-control);
+  background: var(--loom-surface);
+}
+
+.loom-engines__runtime-action p {
+  margin: 0;
+  color: var(--loom-text-secondary);
+}
+
+@media (max-width: 640px) {
+  .loom-runtime-setup__engine {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .loom-runtime-setup__state {
+    grid-column: 2;
+  }
+  .loom-runtime-setup__actions {
+    flex-wrap: wrap;
+  }
+}
+
 .loom-sidebar__brand {
   min-height: 3.75rem;
   justify-content: space-between;
@@ -801,7 +953,7 @@
   background: color-mix(in srgb, var(--loom-primary) 8%, var(--loom-bg-secondary));
   color: var(--loom-text);
   padding-inline: var(--loom-space-2);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-sidebar__project-name svg { flex: 0 0 auto; color: var(--loom-primary); }
@@ -1264,7 +1416,6 @@
 .loom-contextbar__identity { flex: 0 1 auto; }
 .loom-contextbar__controls { flex: 0 1 auto; justify-content: flex-end; }
 .loom-contextbar__identity .loom-logo { flex: 0 0 auto; margin-inline-end: var(--loom-space-2); }
-.loom-contextbar__identity .loom-logo__descriptor { display: none; }
 .loom-contextbar__identity .loom-project-switcher { width: clamp(10rem, 17vw, 16rem); min-width: 0; }
 .loom-contextbar__identity .loom-project-switcher__trigger { min-height: 2.375rem; }
 .loom-project-switcher__empty { margin: 0; color: var(--loom-text-secondary); font-size: 0.75rem; padding: var(--loom-space-2); }
@@ -1527,7 +1678,7 @@
   margin: 0;
   color: var(--loom-text);
   font-size: 1rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -1703,7 +1854,7 @@
   gap: 0.5rem;
   color: var(--loom-primary);
   font-size: 0.875rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-onboarding__terms {
@@ -2070,7 +2221,7 @@
 .loom-feature-card__copy strong {
   color: var(--loom-text);
   font-size: 0.9375rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-feature-card__copy > span {
@@ -2123,7 +2274,7 @@
   min-width: 0;
   gap: 0.5rem;
   color: var(--loom-text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-dashboard__engine-header svg {
@@ -2214,7 +2365,7 @@
   margin: 0;
   color: var(--loom-text);
   font-size: 1rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-engine-card__header p {
@@ -2258,7 +2409,7 @@
   gap: var(--loom-space-2);
   color: var(--loom-warning);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-engine-card__install > div > span {
@@ -2674,7 +2825,7 @@
 .loom-runner__export-card h2 {
   color: var(--loom-text);
   font-size: 0.875rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .loom-runner__export-card p {

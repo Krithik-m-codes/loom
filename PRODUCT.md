@@ -4,7 +4,7 @@
 
 ## Platform
 
-web
+Cross-platform desktop application: Tauri 2 on Windows, macOS, and Linux. The React frontend is bundled into the local desktop WebView. Any public website is a separate static build and must not replace the desktop frontend.
 
 ## Users
 
@@ -20,14 +20,15 @@ One desktop workspace presents multiple load-testing engines through a consisten
 
 ## Operating Context
 
-Users work with Python Locust scripts, JavaScript/TypeScript k6 scripts, and Rust Cargo-based Goose workspaces. They configure hosts and load profiles, follow real-time telemetry and logs, rerun past simulations, and create projects from desktop operating systems. The requested product direction includes Windows, macOS, and Linux support, with later runtime-management and self-hosting work planned separately from the present visual migration.
+Users work with Python Locust scripts, JavaScript/TypeScript k6 scripts, and Rust Cargo-based Goose workspaces. They configure hosts and load profiles, follow real-time telemetry and logs, rerun past simulations, create projects from desktop operating systems, and provision runtimes in their user account.
 
 ## Capabilities and Constraints
 
 - Existing desktop stack: Tauri 2, React, TypeScript, Rust, SQLite, and engine adapter crates.
 - Existing flows to preserve: project and script selection, project creation, engine selection, script editing, visual-flow export, test start/stop, history reruns, command palette, and onboarding.
 - Engines must always be invoked as subprocesses; no engine is linked or embedded in Loom's binary.
-- The current scope is branding and visual UX only. Runtime provisioning, installer choices, Docker control-plane architecture, and release hardening are deliberately deferred follow-on projects.
+- The desktop product includes local project/suite authoring, engine configuration, simulation execution, results, and a user-scope runtime manager. Runtime artifacts are acquired after explicit user selection and verified before use; the app remains usable when an optional runtime is unavailable.
+- A public website, authenticated Docker/self-hosted service, and full release hardening are separate follow-on projects, not responsibilities of the desktop WebView.
 
 ## Brand Commitments
 

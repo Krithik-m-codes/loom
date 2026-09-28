@@ -48,10 +48,7 @@ impl LocustEngine {
     /// Total Request Count, Total Failure Count, Total Median Response Time,
     /// Total Average Response Time, Total Min Response Time, Total Max Response Time,
     /// Total Average Content Size
-    pub fn parse_stats_history_row(
-        row: &csv::StringRecord,
-        run_id: Uuid,
-    ) -> Vec<NormalizedMetric> {
+    pub fn parse_stats_history_row(row: &csv::StringRecord, run_id: Uuid) -> Vec<NormalizedMetric> {
         let mut metrics = Vec::new();
         let now = Utc::now();
 
@@ -62,18 +59,41 @@ impl LocustEngine {
             return metrics;
         }
 
-        let user_count: f64 = row.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let rps: f64 = row.get(4).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let _failures_per_sec: f64 = row.get(5).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let p50: f64 = row.get(6).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let p95: f64 = row.get(11).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let p99: f64 = row.get(13).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let total_requests: f64 = row.get(17).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-        let total_failures: f64 = row.get(18).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
+        let user_count: f64 = row
+            .get(2)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let rps: f64 = row
+            .get(4)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let _failures_per_sec: f64 = row
+            .get(5)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let p50: f64 = row
+            .get(6)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let p95: f64 = row
+            .get(11)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let p99: f64 = row
+            .get(13)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let total_requests: f64 = row
+            .get(17)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
+        let total_failures: f64 = row
+            .get(18)
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0);
 
-        let base_labels: HashMap<String, String> = HashMap::from([
-            ("type".to_string(), request_type.to_string()),
-        ]);
+        let base_labels: HashMap<String, String> =
+            HashMap::from([("type".to_string(), request_type.to_string())]);
 
         // Active users
         metrics.push(NormalizedMetric {
@@ -222,7 +242,9 @@ impl LoadEngine for LocustEngine {
                     .output()
                 {
                     if out.status.success() {
-                        let version = String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string());
+                        let version = String::from_utf8(out.stdout)
+                            .ok()
+                            .map(|s| s.trim().to_string());
                         return EngineAvailability::Ready { version };
                     }
                 }
@@ -231,6 +253,20 @@ impl LoadEngine for LocustEngine {
 
         EngineAvailability::NotInstalled {
             install_hint: "Install Locust via pip:\n  pip install locust\n\nOr see: https://docs.locust.io/en/stable/installation.html".to_string(),
+        }
+    }
+
+    fn detect_with_runtime(&self, runtime: &RuntimeContext) -> EngineAvailability {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.detect();
+        };
+        match std::process::Command::new(&resolved.executable).arg("--version").output() {
+            Ok(out) if out.status.success() => EngineAvailability::Ready {
+                version: Some(String::from_utf8_lossy(&out.stdout).trim().to_string()),
+            },
+            _ => EngineAvailability::NotInstalled {
+                install_hint: format!("The Loom-managed Locust runtime at '{}' is not runnable. Repair it from Engine settings.", resolved.executable.display()),
+            },
         }
     }
 
@@ -284,9 +320,17 @@ impl LoadEngine for LocustEngine {
         let (binary_path, base_args, env) = if let Ok(locust_path) = which::which("locust") {
             (locust_path, vec![], HashMap::new())
         } else if let Ok(py_path) = which::which("python") {
-            (py_path, vec!["-m".to_string(), "locust".to_string()], HashMap::new())
+            (
+                py_path,
+                vec!["-m".to_string(), "locust".to_string()],
+                HashMap::new(),
+            )
         } else if let Ok(py3_path) = which::which("python3") {
-            (py3_path, vec!["-m".to_string(), "locust".to_string()], HashMap::new())
+            (
+                py3_path,
+                vec!["-m".to_string(), "locust".to_string()],
+                HashMap::new(),
+            )
         } else {
             return Err(EngineError::NotInstalled {
                 install_hint: "locust or python not found on PATH".to_string(),
@@ -319,6 +363,49 @@ impl LoadEngine for LocustEngine {
             binary_path,
             args,
             env,
+        })
+    }
+
+    fn prepare_workspace_with_runtime(
+        &self,
+        cfg: &TestConfig,
+        run_dir: &Path,
+        runtime: &RuntimeContext,
+    ) -> Result<PreparedJob, EngineError> {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.prepare_workspace(cfg, run_dir);
+        };
+        std::fs::create_dir_all(run_dir)?;
+        let abs_script_path = std::fs::canonicalize(&cfg.script_path).map_err(|e| {
+            EngineError::Validation(format!(
+                "Failed to resolve script path '{}': {}",
+                cfg.script_path.display(),
+                e
+            ))
+        })?;
+        let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
+        let stats_prefix = run_dir.join("stats");
+        let args = vec![
+            "-f".into(),
+            abs_script_path.to_string_lossy().to_string(),
+            "--headless".into(),
+            "--host".into(),
+            cfg.target.host.clone(),
+            "--users".into(),
+            cfg.load_profile.users.to_string(),
+            "--spawn-rate".into(),
+            cfg.load_profile.spawn_rate.to_string(),
+            "--run-time".into(),
+            format!("{duration_secs}s"),
+            "--csv".into(),
+            stats_prefix.to_string_lossy().to_string(),
+        ];
+        Ok(PreparedJob {
+            run_id: Uuid::new_v4(),
+            work_dir: run_dir.to_path_buf(),
+            binary_path: resolved.executable.clone(),
+            args,
+            env: resolved.env.clone(),
         })
     }
 
@@ -435,13 +522,34 @@ fn parse_final_stats(csv_content: &str, run_id: Uuid) -> RunSummary {
     for record in reader.records().flatten() {
         let name = record.get(1).unwrap_or("").trim();
         if name == "Aggregated" {
-            total_requests = record.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-            failed_requests = record.get(3).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-            avg_latency = record.get(5).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-            p50 = record.get(6).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-            p95 = record.get(11).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-            p99 = record.get(13).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
-            rps = record.get(9).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
+            total_requests = record
+                .get(2)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
+            failed_requests = record
+                .get(3)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
+            avg_latency = record
+                .get(5)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0.0);
+            p50 = record
+                .get(6)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0.0);
+            p95 = record
+                .get(11)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0.0);
+            p99 = record
+                .get(13)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0.0);
+            rps = record
+                .get(9)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0.0);
         }
     }
 
@@ -537,30 +645,30 @@ mod tests {
     #[test]
     fn test_parse_stats_history_row() {
         let record = csv::StringRecord::from(vec![
-            "GET",           // Type
-            "Aggregated",    // Name
-            "10",            // User count
-            "1694000000",    // Timestamp
-            "45.5",          // Requests/s
-            "0.5",           // Failures/s
-            "12.0",          // 50%
-            "15.0",          // 66%
-            "18.0",          // 75%
-            "20.0",          // 80%
-            "25.0",          // 90%
-            "30.0",          // 95%
-            "35.0",          // 98%
-            "40.0",          // 99%
-            "45.0",          // 99.9%
-            "50.0",          // 99.99%
-            "55.0",          // 100%
-            "1000",          // Total Request Count
-            "5",             // Total Failure Count
-            "12.0",          // Total Median Response Time
-            "15.0",          // Total Average Response Time
-            "1.0",           // Total Min Response Time
-            "100.0",         // Total Max Response Time
-            "512",           // Total Average Content Size
+            "GET",        // Type
+            "Aggregated", // Name
+            "10",         // User count
+            "1694000000", // Timestamp
+            "45.5",       // Requests/s
+            "0.5",        // Failures/s
+            "12.0",       // 50%
+            "15.0",       // 66%
+            "18.0",       // 75%
+            "20.0",       // 80%
+            "25.0",       // 90%
+            "30.0",       // 95%
+            "35.0",       // 98%
+            "40.0",       // 99%
+            "45.0",       // 99.9%
+            "50.0",       // 99.99%
+            "55.0",       // 100%
+            "1000",       // Total Request Count
+            "5",          // Total Failure Count
+            "12.0",       // Total Median Response Time
+            "15.0",       // Total Average Response Time
+            "1.0",        // Total Min Response Time
+            "100.0",      // Total Max Response Time
+            "512",        // Total Average Content Size
         ]);
 
         let run_id = Uuid::new_v4();
@@ -569,15 +677,24 @@ mod tests {
         assert_eq!(metrics.len(), 8); // users, rps, total, failed, error_rate, p50, p95, p99
 
         // Check RPS metric
-        let rps = metrics.iter().find(|m| m.metric == MetricKind::RequestsPerSecond).unwrap();
+        let rps = metrics
+            .iter()
+            .find(|m| m.metric == MetricKind::RequestsPerSecond)
+            .unwrap();
         assert!((rps.value - 45.5).abs() < f64::EPSILON);
 
         // Check active users
-        let users = metrics.iter().find(|m| m.metric == MetricKind::ActiveUsers).unwrap();
+        let users = metrics
+            .iter()
+            .find(|m| m.metric == MetricKind::ActiveUsers)
+            .unwrap();
         assert!((users.value - 10.0).abs() < f64::EPSILON);
 
         // Check error rate
-        let err = metrics.iter().find(|m| m.metric == MetricKind::ErrorRate).unwrap();
+        let err = metrics
+            .iter()
+            .find(|m| m.metric == MetricKind::ErrorRate)
+            .unwrap();
         assert!((err.value - 0.005).abs() < 0.001); // 5/1000
     }
 
@@ -611,6 +728,24 @@ mod tests {
         let script_arg_idx = job.args.iter().position(|a| a == "-f").unwrap();
         let script_arg = &job.args[script_arg_idx + 1];
         assert!(Path::new(script_arg).is_absolute());
+
+        let managed_binary = temp_dir.join("managed runtime").join("locust");
+        let mut runtime = RuntimeContext::default();
+        runtime.set(
+            "locust",
+            EngineRuntime {
+                executable: managed_binary.clone(),
+                env: HashMap::from([("LOOM_RUNTIME".into(), "managed".into())]),
+            },
+        );
+        let managed_job = engine
+            .prepare_workspace_with_runtime(&cfg, &run_dir, &runtime)
+            .unwrap();
+        assert_eq!(managed_job.binary_path, managed_binary);
+        assert_eq!(
+            managed_job.env.get("LOOM_RUNTIME").map(String::as_str),
+            Some("managed")
+        );
 
         // Cleanup
         let _ = std::fs::remove_dir_all(&temp_dir);

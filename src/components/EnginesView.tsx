@@ -7,9 +7,10 @@ import { StatusBadge } from "./ui/StatusBadge";
 
 interface EnginesViewProps {
   engines: EngineInfo[];
+  onManageRuntimes: () => void;
 }
 
-export const EnginesView: React.FC<EnginesViewProps> = ({ engines }) => {
+export const EnginesView: React.FC<EnginesViewProps> = ({ engines, onManageRuntimes }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const copyCommand = (id: string, text: string) => {
@@ -26,6 +27,11 @@ export const EnginesView: React.FC<EnginesViewProps> = ({ engines }) => {
           description="Loom invokes every load-testing engine as an independent subprocess; it never links, embeds, or compiles an engine binary."
         />
       </header>
+
+      <div className="loom-engines__runtime-action">
+        <p>Install or repair Loom-managed runtimes without changing your system environment.</p>
+        <LoomButton onClick={onManageRuntimes}>Install or repair runtimes</LoomButton>
+      </div>
 
       <div className="loom-engines__body">
         {engines.length === 0 ? (

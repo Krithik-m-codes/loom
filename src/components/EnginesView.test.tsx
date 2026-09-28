@@ -4,7 +4,7 @@ import { EnginesView } from "./EnginesView";
 
 describe("EnginesView", () => {
   it("explains an empty engine list", () => {
-    render(<EnginesView engines={[]} />);
+    render(<EnginesView engines={[]} onManageRuntimes={() => {}} />);
 
     expect(screen.getByText("No engines detected")).toBeVisible();
   });

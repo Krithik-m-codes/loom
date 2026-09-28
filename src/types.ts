@@ -133,3 +133,19 @@ export interface SuiteWithContent extends TestSuite {
   scriptContent: string;
   visualNodes?: unknown;
 }
+
+export type RuntimeId = "locust" | "goose" | "k6";
+
+export type RuntimeStatus =
+  | { status: "missing" }
+  | { status: "installing"; stage: string }
+  | { status: "ready"; version: string; path: string }
+  | { status: "failed"; stage: string; message: string };
+
+export interface RuntimeProgress {
+  runtime: RuntimeId;
+  stage: string;
+  bytesReceived: number;
+  totalBytes: number | null;
+  message: string;
+}

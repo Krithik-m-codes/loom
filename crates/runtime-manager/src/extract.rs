@@ -5,6 +5,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
+use tokio_util::sync::CancellationToken;
 use zip::ZipArchive;
 
 const MAX_ENTRIES: usize = 100_000;
@@ -41,6 +42,18 @@ pub fn extract_verified(
     format: ArchiveFormat,
     staging_dir: &Path,
 ) -> Result<(), InstallError> {
+    extract_verified_with_cancel(archive_path, format, staging_dir, &CancellationToken::new())
+}
+
+pub fn extract_verified_with_cancel(
+    archive_path: &Path,
+    format: ArchiveFormat,
+    staging_dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<(), InstallError> {
+    if cancel.is_cancelled() {
+        return Err(InstallError::Cancelled);
+    }
     fs::create_dir_all(staging_dir)?;
     let root_meta = fs::symlink_metadata(staging_dir)?;
     if root_meta.file_type().is_symlink() || !root_meta.is_dir() {
@@ -49,9 +62,9 @@ pub fn extract_verified(
     let root = fs::canonicalize(staging_dir)?;
 
     match format {
-        ArchiveFormat::TarGz => extract_tar_gz(archive_path, &root),
-        ArchiveFormat::Zip => extract_zip(archive_path, &root),
-        ArchiveFormat::Executable => extract_executable(archive_path, &root),
+        ArchiveFormat::TarGz => extract_tar_gz(archive_path, &root, cancel),
+        ArchiveFormat::Zip => extract_zip(archive_path, &root, cancel),
+        ArchiveFormat::Executable => extract_executable(archive_path, &root, cancel),
     }
 }
 
@@ -119,6 +132,7 @@ fn write_file<R: Read>(
     reader: &mut R,
     expected_size: u64,
     mode: Option<u32>,
+    cancel: &CancellationToken,
 ) -> Result<u64, InstallError> {
     if expected_size > MAX_EXPANDED_BYTES {
         return Err(InstallError::SizeLimit);
@@ -129,7 +143,19 @@ fn write_file<R: Read>(
         .create_new(true)
         .open(&target)?;
     let mut limited = reader.take(expected_size.saturating_add(1));
-    let written = io::copy(&mut limited, &mut output)?;
+    let mut written = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        if cancel.is_cancelled() {
+            return Err(InstallError::Cancelled);
+        }
+        let count = limited.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        output.write_all(&buffer[..count])?;
+        written += count as u64;
+    }
     if written != expected_size {
         return Err(InstallError::Archive(format!(
             "entry {} had an unexpected expanded size",
@@ -141,7 +167,11 @@ fn write_file<R: Read>(
     Ok(written)
 }
 
-fn extract_tar_gz(path: &Path, root: &Path) -> Result<(), InstallError> {
+fn extract_tar_gz(
+    path: &Path,
+    root: &Path,
+    cancel: &CancellationToken,
+) -> Result<(), InstallError> {
     let input = File::open(path)?;
     let mut archive = tar::Archive::new(GzDecoder::new(input));
     let mut seen = HashSet::new();
@@ -150,6 +180,9 @@ fn extract_tar_gz(path: &Path, root: &Path) -> Result<(), InstallError> {
         .entries()
         .map_err(|error| InstallError::Archive(error.to_string()))?;
     for entry in entries {
+        if cancel.is_cancelled() {
+            return Err(InstallError::Cancelled);
+        }
         let mut entry = entry.map_err(|error| InstallError::Archive(error.to_string()))?;
         if seen.len() >= MAX_ENTRIES {
             return Err(InstallError::SizeLimit);
@@ -181,7 +214,7 @@ fn extract_tar_gz(path: &Path, root: &Path) -> Result<(), InstallError> {
                 .header()
                 .mode()
                 .map_err(|error| InstallError::Archive(error.to_string()))?;
-            write_file(root, &relative, &mut entry, size, Some(mode))?;
+            write_file(root, &relative, &mut entry, size, Some(mode), cancel)?;
         } else {
             return Err(InstallError::UnsupportedEntry(
                 relative.display().to_string(),
@@ -191,13 +224,16 @@ fn extract_tar_gz(path: &Path, root: &Path) -> Result<(), InstallError> {
     Ok(())
 }
 
-fn extract_zip(path: &Path, root: &Path) -> Result<(), InstallError> {
+fn extract_zip(path: &Path, root: &Path, cancel: &CancellationToken) -> Result<(), InstallError> {
     let input = File::open(path)?;
     let mut archive =
         ZipArchive::new(input).map_err(|error| InstallError::Archive(error.to_string()))?;
     let mut seen = HashSet::new();
     let mut total = 0u64;
     for index in 0..archive.len() {
+        if cancel.is_cancelled() {
+            return Err(InstallError::Cancelled);
+        }
         if index >= MAX_ENTRIES {
             return Err(InstallError::SizeLimit);
         }
@@ -230,12 +266,16 @@ fn extract_zip(path: &Path, root: &Path) -> Result<(), InstallError> {
             return Err(InstallError::SizeLimit);
         }
         let mode = entry.unix_mode();
-        write_file(root, &relative, &mut entry, size, mode)?;
+        write_file(root, &relative, &mut entry, size, mode, cancel)?;
     }
     Ok(())
 }
 
-fn extract_executable(path: &Path, root: &Path) -> Result<(), InstallError> {
+fn extract_executable(
+    path: &Path,
+    root: &Path,
+    cancel: &CancellationToken,
+) -> Result<(), InstallError> {
     let name = path
         .file_name()
         .ok_or_else(|| InstallError::UnsafePath(path.display().to_string()))?;
@@ -245,7 +285,7 @@ fn extract_executable(path: &Path, root: &Path) -> Result<(), InstallError> {
         return Err(InstallError::SizeLimit);
     }
     let mut input = File::open(path)?;
-    write_file(root, &relative, &mut input, size, Some(0o755))?;
+    write_file(root, &relative, &mut input, size, Some(0o755), cancel)?;
     Ok(())
 }
 

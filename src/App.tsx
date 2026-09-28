@@ -12,6 +12,7 @@ import { LogDock } from "./components/dock/LogDock";
 import { RunDetailsDrawer } from "./components/RunDetailsDrawer";
 import { ToastProvider, useToast } from "./components/ui/Toast";
 import { OnboardingWizard } from "./components/setup/OnboardingWizard";
+import { cancelRuntimeInstallation, getRuntimeStatus, installRuntimes, subscribeToRuntimeError, subscribeToRuntimeProgress, subscribeToRuntimeReady, type K6Consent, type RuntimeSelection } from "./lib/runtime-ipc";
 import { NewProjectModal } from "./components/projects/NewProjectModal";
 import { NewSuiteModal } from "./components/projects/NewSuiteModal";
 import {
@@ -26,8 +27,14 @@ import {
   subscribeToRunStarted,
   subscribeToRunFinished,
 } from "./lib/ipc";
-import { EngineInfo, NormalizedMetric, Project, RunLog, RunRecord, TestConfig, TestSuite } from "./types";
+import { EngineInfo, NormalizedMetric, Project, RunLog, RunRecord, RuntimeId, RuntimeProgress, RuntimeStatus, TestConfig, TestSuite } from "./types";
 import { configForSuite, projectConfigForSelection } from "./lib/projectState";
+
+function replaceRuntimeStatus(statuses: RuntimeStatus[], runtime: RuntimeId, state: RuntimeStatus): RuntimeStatus[] {
+  const next = [...statuses];
+  next[runtime === "locust" ? 0 : runtime === "goose" ? 1 : 2] = state;
+  return next;
+}
 
 export default function App() {
   return (
@@ -40,6 +47,10 @@ export default function App() {
 function AppShell() {
   const { pushToast } = useToast();
   const [engines, setEngines] = useState<EngineInfo[]>([]);
+  const [runtimeStatuses, setRuntimeStatuses] = useState<RuntimeStatus[]>([]);
+  const [runtimeProgress, setRuntimeProgress] = useState<RuntimeProgress | null>(null);
+  const [runtimeInstalling, setRuntimeInstalling] = useState(false);
+  const pendingRuntimeResults = useRef(0);
   // Default to Dashboard directly as requested
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [openTabs, setOpenTabs] = useState<string[]>(["dashboard"]);
@@ -119,6 +130,7 @@ function AppShell() {
       return false;
     }
   });
+  const [onboardingInitialStep, setOnboardingInitialStep] = useState(1);
 
   // Default test configuration
   const [config, setConfig] = useState<TestConfig>(() => projectConfigForSelection(projects, activeProjectId));
@@ -127,6 +139,7 @@ function AppShell() {
   // Load engines on mount
   useEffect(() => {
     loadEngineList();
+    void getRuntimeStatus().then(setRuntimeStatuses).catch((error) => console.error("Failed to load managed runtime status:", error));
   }, []);
 
   // Load projects and suites from SQLite on mount
@@ -180,6 +193,9 @@ function AppShell() {
     let unlistenLogs: (() => void) | null = null;
     let unlistenStarted: (() => void) | null = null;
     let unlistenFinished: (() => void) | null = null;
+    let unlistenRuntimeProgress: (() => void) | null = null;
+    let unlistenRuntimeReady: (() => void) | null = null;
+    let unlistenRuntimeError: (() => void) | null = null;
 
     const setup = async () => {
       unlistenMetrics = await subscribeToMetrics((metric) => {
@@ -200,6 +216,24 @@ function AppShell() {
         setActiveRunId(null);
         setRunHistoryRevision((revision) => revision + 1);
       });
+      unlistenRuntimeProgress = await subscribeToRuntimeProgress(setRuntimeProgress);
+      const refreshRuntimeStatus = () => {
+        pendingRuntimeResults.current = Math.max(0, pendingRuntimeResults.current - 1);
+        if (pendingRuntimeResults.current === 0) {
+          setRuntimeInstalling(false);
+          setRuntimeProgress(null);
+        }
+      };
+      unlistenRuntimeReady = await subscribeToRuntimeReady(({ runtime, state }) => {
+        void getRuntimeStatus().then(setRuntimeStatuses).catch((error) => console.error("Failed to refresh managed runtime status:", error));
+        void loadEngineList();
+        refreshRuntimeStatus();
+        setRuntimeStatuses((current) => replaceRuntimeStatus(current, runtime, state));
+      });
+      unlistenRuntimeError = await subscribeToRuntimeError(({ runtime, message }) => {
+        refreshRuntimeStatus();
+        setRuntimeStatuses((current) => replaceRuntimeStatus(current, runtime, { status: "failed", stage: "install", message: message ?? "Installation failed" }));
+      });
     };
 
     setup();
@@ -209,6 +243,9 @@ function AppShell() {
       if (unlistenLogs) unlistenLogs();
       if (unlistenStarted) unlistenStarted();
       if (unlistenFinished) unlistenFinished();
+      if (unlistenRuntimeProgress) unlistenRuntimeProgress();
+      if (unlistenRuntimeReady) unlistenRuntimeReady();
+      if (unlistenRuntimeError) unlistenRuntimeError();
     };
   }, []);
 
@@ -412,6 +449,27 @@ function AppShell() {
     openWorkspaceTab("dashboard");
   };
 
+  const handleInstallRuntimes = async (selection: RuntimeSelection, consent?: K6Consent) => {
+    const count = Number(selection.locust) + Number(selection.goose) + Number(selection.k6);
+    pendingRuntimeResults.current = count;
+    setRuntimeInstalling(true);
+    try {
+      await installRuntimes(selection, consent);
+    } catch (error) {
+      pendingRuntimeResults.current = 0;
+      setRuntimeInstalling(false);
+      pushToast(`Runtime installation could not start: ${String(error)}`, "error");
+    }
+  };
+
+  const handleCancelRuntimeInstall = async () => {
+    try {
+      await cancelRuntimeInstallation();
+    } catch (error) {
+      pushToast(`Could not cancel installation: ${String(error)}`, "error");
+    }
+  };
+
   const selectedEngineObj = engines.find((e) => e.id === selectedEngineId);
   const selectedEngineName = selectedEngineObj?.display_name || selectedEngineId;
 
@@ -561,7 +619,7 @@ function AppShell() {
           {openTabs.includes("engines") && (
             <div id="workspace-panel-engines" role="tabpanel" aria-labelledby="workspace-tab-engines"
               className="loom-workspace__panel" hidden={activeTab !== "engines"}>
-              <EnginesView engines={engines} />
+              <EnginesView engines={engines} onManageRuntimes={() => { setOnboardingInitialStep(2); setShowOnboarding(true); }} />
             </div>
           )}
         </div>
@@ -588,7 +646,12 @@ function AppShell() {
       {/* 4. Professional Setup / Onboarding Wizard */}
       {showOnboarding && (
         <OnboardingWizard
-          engines={engines}
+          runtimeStatuses={runtimeStatuses}
+          runtimeProgress={runtimeProgress}
+          runtimeInstalling={runtimeInstalling}
+          onInstallRuntimes={(selection, consent) => void handleInstallRuntimes(selection, consent)}
+          onCancelRuntimeInstall={() => void handleCancelRuntimeInstall()}
+          initialStep={onboardingInitialStep}
           onComplete={handleCompleteOnboarding}
         />
       )}

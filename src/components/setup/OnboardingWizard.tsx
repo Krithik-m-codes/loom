@@ -1,44 +1,40 @@
 import { useState } from "react";
 import {
-  AlertTriangle,
   ArrowRight,
   Check,
   CheckCircle2,
   CheckSquare,
-  Copy,
-  Cpu,
   FolderCheck,
   ShieldCheck,
   Sparkles,
   Square,
-  Terminal,
 } from "lucide-react";
-import type { EngineInfo } from "../../types";
+import type { RuntimeProgress, RuntimeStatus } from "../../types";
+import type { K6Consent, RuntimeSelection } from "../../lib/runtime-ipc";
 import { LoomLogo } from "../LoomLogo";
 import { LoomButton } from "../ui/LoomButton";
+import { RuntimeSetupStep } from "./RuntimeSetupStep";
 
 interface OnboardingWizardProps {
-  engines: EngineInfo[];
+  runtimeStatuses: RuntimeStatus[];
+  runtimeProgress: RuntimeProgress | null;
+  runtimeInstalling: boolean;
+  onInstallRuntimes: (selection: RuntimeSelection, consent?: K6Consent) => void;
+  onCancelRuntimeInstall: () => void;
+  initialStep?: number;
   onComplete: () => void;
 }
 
-export const OnboardingWizard = ({ engines, onComplete }: OnboardingWizardProps) => {
-  const [currentStep, setCurrentStep] = useState(1);
+export const OnboardingWizard = ({ runtimeStatuses, runtimeProgress, runtimeInstalling, onInstallRuntimes, onCancelRuntimeInstall, initialStep = 1, onComplete }: OnboardingWizardProps) => {
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-
-  const copyCommand = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCmd(id);
-    setTimeout(() => setCopiedCmd(null), 2000);
-  };
 
   return (
     <div className="loom-modal-backdrop loom-modal-backdrop--centered">
       <section className="loom-modal loom-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
         <header className="loom-onboarding__header">
           <div className="loom-onboarding__brand">
-            <LoomLogo size={36} />
+            <LoomLogo size={36} variant="horizontal" />
             <div>
               <div className="loom-onboarding__title-row">
                 <h1 id="onboarding-title">Welcome to Loom</h1>
@@ -80,49 +76,7 @@ export const OnboardingWizard = ({ engines, onComplete }: OnboardingWizardProps)
             </div>
           )}
 
-          {currentStep === 2 && (
-            <div className="loom-onboarding__content">
-              <div className="loom-onboarding__section-title"><Cpu aria-hidden="true" size={20} /> Engine prerequisites & environment doctor</div>
-              <p>Loom checks whether each engine binary is installed and available on your operating-system PATH.</p>
-              <div className="loom-onboarding__engine-list">
-                {engines.map((engine) => {
-                  const ready = "Ready" in engine.availability;
-                  const version = "Ready" in engine.availability ? engine.availability.Ready.version : null;
-                  const installHint = "NotInstalled" in engine.availability ? engine.availability.NotInstalled.install_hint : null;
-                  const command = engine.id === "k6" ? "winget install k6.k6" : engine.id === "locust" ? "pip install locust" : "rustup update";
-                  const displayCommand = engine.id === "k6" ? "winget install k6.k6 (or brew install k6)" : engine.id === "locust" ? "pip install locust (requires Python 3.10+)" : "Install Rust from https://rustup.rs/ (Cargo compiles Goose scenarios)";
-
-                  return (
-                    <article className="loom-onboarding__engine" key={engine.id}>
-                      <div className="loom-onboarding__engine-header">
-                        <div className="loom-onboarding__engine-name">
-                          <span className="loom-engine-row__availability" data-ready={ready} aria-hidden="true" />
-                          <strong>{engine.display_name}</strong>
-                          <span className={`loom-engine-tier loom-engine-tier--${engine.license_tier.toLowerCase()}`}>{engine.license_tier} tier</span>
-                        </div>
-                        {ready ? <span className="loom-onboarding__availability loom-onboarding__availability--ready"><CheckCircle2 aria-hidden="true" size={16} /> Installed</span> : <span className="loom-onboarding__availability loom-onboarding__availability--missing"><AlertTriangle aria-hidden="true" size={16} /> Not found</span>}
-                      </div>
-
-                      {ready && version && <code className="loom-onboarding__version">{version}</code>}
-
-                      {!ready && installHint && (
-                        <div className="loom-onboarding__install">
-                          <div className="loom-onboarding__install-header">
-                            <span><Terminal aria-hidden="true" size={14} /> Install command</span>
-                            <LoomButton type="button" variant="ghost" className="loom-onboarding__copy" onClick={() => copyCommand(engine.id, command)}>
-                              {copiedCmd === engine.id ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
-                              {copiedCmd === engine.id ? "Copied" : "Copy command"}
-                            </LoomButton>
-                          </div>
-                          <code>{displayCommand}</code>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {currentStep === 2 && <div className="loom-onboarding__content"><RuntimeSetupStep statuses={runtimeStatuses} progress={runtimeProgress} isInstalling={runtimeInstalling} onInstall={onInstallRuntimes} onCancel={onCancelRuntimeInstall} onContinue={() => setCurrentStep(4)} /></div>}
 
           {currentStep === 3 && (
             <div className="loom-onboarding__content">
@@ -147,13 +101,13 @@ export const OnboardingWizard = ({ engines, onComplete }: OnboardingWizardProps)
 
         <footer className="loom-onboarding__footer">
           {currentStep > 1 && currentStep < 4 ? <LoomButton variant="secondary" onClick={() => setCurrentStep((step) => step - 1)}>Back</LoomButton> : <span />}
-          {currentStep < 4 ? (
+          {currentStep < 4 && currentStep !== 2 ? (
             <LoomButton onClick={() => setCurrentStep((step) => step + 1)} disabled={currentStep === 1 && !termsAccepted}>
               Continue <ArrowRight aria-hidden="true" size={16} />
             </LoomButton>
-          ) : (
+          ) : currentStep === 4 ? (
             <LoomButton onClick={onComplete}>Launch dashboard</LoomButton>
-          )}
+          ) : null}
         </footer>
       </section>
     </div>

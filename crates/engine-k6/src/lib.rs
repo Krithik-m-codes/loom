@@ -123,6 +123,16 @@ impl LoadEngine for K6Engine {
         }
     }
 
+    fn detect_with_runtime(&self, runtime: &RuntimeContext) -> EngineAvailability {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.detect();
+        };
+        match std::process::Command::new(&resolved.executable).arg("version").envs(&resolved.env).output() {
+            Ok(out) if out.status.success() => EngineAvailability::Ready { version: Some(String::from_utf8_lossy(&out.stdout).trim().to_string()) },
+            _ => EngineAvailability::NotInstalled { install_hint: format!("The Loom-managed k6 runtime at '{}' is not runnable. Repair it from Engine settings.", resolved.executable.display()) },
+        }
+    }
+
     fn validate_config(&self, cfg: &TestConfig) -> Result<(), EngineError> {
         if !cfg.script_path.exists() {
             return Err(EngineError::Validation(format!(
@@ -190,6 +200,39 @@ impl LoadEngine for K6Engine {
             run_id: Uuid::new_v4(),
             work_dir: run_dir.to_path_buf(),
             binary_path: k6_path,
+            args,
+            env,
+        })
+    }
+
+    fn prepare_workspace_with_runtime(
+        &self,
+        cfg: &TestConfig,
+        run_dir: &Path,
+        runtime: &RuntimeContext,
+    ) -> Result<PreparedJob, EngineError> {
+        let Some(resolved) = runtime.get(self.id()) else {
+            return self.prepare_workspace(cfg, run_dir);
+        };
+        std::fs::create_dir_all(run_dir)?;
+        let duration_secs = parse_duration_secs(&cfg.load_profile.duration)?;
+        let json_out = run_dir.join("metrics.json");
+        let args = vec![
+            "run".into(),
+            cfg.script_path.to_string_lossy().to_string(),
+            "--vus".into(),
+            cfg.load_profile.users.to_string(),
+            "--duration".into(),
+            format!("{duration_secs}s"),
+            "--out".into(),
+            format!("json={}", json_out.to_string_lossy()),
+        ];
+        let mut env = resolved.env.clone();
+        env.insert("TARGET_HOST".into(), cfg.target.host.clone());
+        Ok(PreparedJob {
+            run_id: Uuid::new_v4(),
+            work_dir: run_dir.to_path_buf(),
+            binary_path: resolved.executable.clone(),
             args,
             env,
         })
@@ -297,7 +340,11 @@ mod tests {
         let engine = K6Engine::new();
         let availability = engine.detect();
         if let EngineAvailability::NotInstalled { install_hint } = availability {
-            assert!(install_hint.contains("winget") || install_hint.contains("brew") || install_hint.contains("k6"));
+            assert!(
+                install_hint.contains("winget")
+                    || install_hint.contains("brew")
+                    || install_hint.contains("k6")
+            );
         }
     }
 
@@ -311,5 +358,49 @@ mod tests {
         assert_eq!(metric.value, 52.4);
         assert_eq!(metric.engine, "k6");
         assert_eq!(metric.labels.get("status"), Some(&"200".to_string()));
+    }
+
+    #[test]
+    fn prepared_job_prefers_managed_k6_and_preserves_runtime_environment() {
+        let root = std::env::temp_dir().join(format!("loom k6 runtime {}", Uuid::new_v4()));
+        let script = root.join("scenario with spaces.js");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&script, "export default function () {}\n").unwrap();
+        let cfg = TestConfig {
+            project_name: "project".into(),
+            engine: "k6".into(),
+            script_path: script,
+            load_profile: LoadProfile {
+                users: 2,
+                spawn_rate: 1,
+                duration: "5s".into(),
+            },
+            target: TargetConfig {
+                host: "http://localhost".into(),
+                headers: None,
+            },
+        };
+        let managed = root.join("managed k6").join("k6");
+        let mut runtime = RuntimeContext::default();
+        runtime.set(
+            "k6",
+            EngineRuntime {
+                executable: managed.clone(),
+                env: HashMap::from([("LOOM_RUNTIME".into(), "managed".into())]),
+            },
+        );
+        let job = K6Engine::new()
+            .prepare_workspace_with_runtime(&cfg, &root.join("run"), &runtime)
+            .unwrap();
+        assert_eq!(job.binary_path, managed);
+        assert!(job
+            .args
+            .iter()
+            .any(|arg| arg.contains("scenario with spaces.js")));
+        assert_eq!(
+            job.env.get("LOOM_RUNTIME").map(String::as_str),
+            Some("managed")
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 }
