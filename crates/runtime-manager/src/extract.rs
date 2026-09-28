@@ -30,6 +30,8 @@ pub enum InstallError {
     ChecksumMismatch,
     #[error("runtime store operation failed: {0}")]
     Store(String),
+    #[error("runtime process failed: {0}")]
+    Process(String),
 }
 
 /// Extract a checksum-verified archive into a fresh staging directory.

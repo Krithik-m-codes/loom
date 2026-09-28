@@ -103,3 +103,32 @@ fn refuses_staging_directories_outside_runtime_root() {
         InstallState::Missing
     );
 }
+
+#[test]
+fn activates_an_existing_version_directory_without_moving_embedded_paths() {
+    let root = tempdir().unwrap();
+    let store = RuntimeStore::new(root.path());
+    let version_dir = root
+        .path()
+        .join("runtimes/locust/versions/3.12.14-locust-2.46.6");
+    fs::create_dir_all(version_dir.join("venv/Scripts")).unwrap();
+    let executable = version_dir.join("venv/Scripts/locust.exe");
+    fs::write(&executable, b"managed runtime").unwrap();
+
+    let state = store
+        .activate_existing(
+            RuntimeId::Locust,
+            &version_dir,
+            RuntimeMetadata {
+                version: "3.12.14-locust-2.46.6".into(),
+                executable_path: "versions/3.12.14-locust-2.46.6/venv/Scripts/locust.exe".into(),
+            },
+        )
+        .unwrap();
+
+    assert!(executable.is_file());
+    let canonical_executable = fs::canonicalize(&executable).unwrap();
+    assert!(
+        matches!(state, InstallState::Ready { path, .. } if path == canonical_executable.to_string_lossy())
+    );
+}

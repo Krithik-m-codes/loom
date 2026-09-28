@@ -154,6 +154,41 @@ impl RuntimeStore {
         self.status(runtime)
     }
 
+    /// Publish a runtime installed directly into its final version directory.
+    /// This is needed for tools such as Python virtual environments whose
+    /// generated scripts embed absolute paths and cannot safely be renamed.
+    pub fn activate_existing(
+        &self,
+        runtime: RuntimeId,
+        version_dir: &Path,
+        metadata: RuntimeMetadata,
+    ) -> Result<InstallState, InstallError> {
+        let root = self.ensure_root()?;
+        checked_version(&metadata.version)?;
+        let runtime_dir = self.runtime_dir(&root, runtime);
+        let versions = runtime_dir.join("versions");
+        let versions = fs::canonicalize(&versions)?;
+        let candidate = fs::canonicalize(version_dir)?;
+        if !candidate.starts_with(&versions) || candidate == versions {
+            return Err(InstallError::Store(
+                "runtime version directory is outside managed versions".into(),
+            ));
+        }
+        let relative = checked_relative(Path::new(&metadata.executable_path))?;
+        let executable = runtime_dir.join(relative);
+        let canonical_executable = fs::canonicalize(&executable)?;
+        if !canonical_executable.starts_with(&candidate)
+            || !fs::symlink_metadata(&executable)?.is_file()
+            || fs::symlink_metadata(&executable)?.file_type().is_symlink()
+        {
+            return Err(InstallError::Store(
+                "runtime executable is not a regular file within its version directory".into(),
+            ));
+        }
+        publish_active(&runtime_dir, &metadata)?;
+        self.status(runtime)
+    }
+
     fn ensure_root(&self) -> Result<PathBuf, InstallError> {
         fs::create_dir_all(&self.root)?;
         let metadata = fs::symlink_metadata(&self.root)?;
@@ -166,6 +201,28 @@ impl RuntimeStore {
     fn runtime_dir(&self, root: &Path, runtime: RuntimeId) -> PathBuf {
         root.join("runtimes").join(runtime_name(runtime))
     }
+}
+
+fn publish_active(runtime_dir: &Path, metadata: &RuntimeMetadata) -> Result<(), InstallError> {
+    let bytes =
+        serde_json::to_vec(metadata).map_err(|error| InstallError::Store(error.to_string()))?;
+    let temp_path = runtime_dir.join(format!("active.{}.tmp", uuid::Uuid::new_v4()));
+    let active_path = runtime_dir.join("active.json");
+    let write_result = (|| -> Result<(), InstallError> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        replace_file(&temp_path, &active_path)?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(temp_path);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn runtime_name(runtime: RuntimeId) -> &'static str {
@@ -192,13 +249,13 @@ fn checked_version(version: &str) -> Result<&str, InstallError> {
 }
 
 #[cfg(unix)]
-fn replace_file(from: &Path, to: &Path) -> Result<(), InstallError> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> Result<(), InstallError> {
     fs::rename(from, to)?;
     Ok(())
 }
 
 #[cfg(windows)]
-fn replace_file(from: &Path, to: &Path) -> Result<(), InstallError> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> Result<(), InstallError> {
     use std::os::windows::ffi::OsStrExt;
     let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();

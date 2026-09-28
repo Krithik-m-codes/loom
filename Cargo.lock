@@ -3064,6 +3064,8 @@ dependencies = [
 name = "runtime-manager"
 version = "0.2.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "flate2",
  "futures-util",
  "reqwest 0.12.28",
