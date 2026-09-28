@@ -54,6 +54,8 @@ export const EditorView: React.FC<EditorViewProps> = ({
   const [scenarioDocument, setScenarioDocument] = useState<ScenarioDocument | null>(null);
   const [adapters, setAdapters] = useState<EngineAdapterMetadata[]>([]);
   const [scenarioDiagnostics, setScenarioDiagnostics] = useState<ScenarioDiagnostic[]>([]);
+  const [analysis, setAnalysis] = useState<{ diagnostics: ScenarioDiagnostic[]; supportPercent: number } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [supportPercent, setSupportPercent] = useState<number | undefined>();
   const [sourceStale, setSourceStale] = useState(false);
   const [scriptDirty, setScriptDirty] = useState(false);
@@ -83,6 +85,7 @@ export const EditorView: React.FC<EditorViewProps> = ({
       setProjectId("");
       setScenarioDocument(null);
       setScenarioDiagnostics([]);
+      setAnalysis(null);
       setSupportPercent(undefined);
       setSourceStale(false);
       setScriptDirty(false);
@@ -96,6 +99,7 @@ export const EditorView: React.FC<EditorViewProps> = ({
       .then((suite) => {
         if (cancelled) return;
         setCode(suite.scriptContent ?? "");
+        setAnalysis(null);
         setProjectId(suite.projectId);
         const savedDocument = parseScenarioDocument(suite.visualNodes);
         setScenarioDocument(savedDocument);
@@ -171,6 +175,30 @@ export const EditorView: React.FC<EditorViewProps> = ({
       setStatus(`Could not import script: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const analyzeSource = async () => {
+    if (!suiteId || !projectId) return;
+    setAnalyzing(true);
+    try {
+      const source: SourceDocument = {
+        id: `analysis-${suiteId}`,
+        fileName: scriptPath.split(/[\\/]/).pop() || `scenario.${engine === "goose" ? "rs" : engine === "k6" ? "js" : "py"}`,
+        language: languageForPath(scriptPath),
+        content: code,
+      };
+      const parsed = await parseScenarioSource(engine, source, {
+        projectId,
+        suiteId,
+        maxBytes: 2 * 1024 * 1024,
+        cancelId: globalThis.crypto?.randomUUID?.() ?? `analyze-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
+      setAnalysis({ diagnostics: parsed.diagnostics, supportPercent: parsed.supportPercent });
+    } catch (err) {
+      setStatus(`Source analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -320,6 +348,9 @@ export const EditorView: React.FC<EditorViewProps> = ({
             <span>{language}</span>
             {dirty && <span title="Unsaved changes">Unsaved</span>}
             {sourceStale && <span role="alert">Diagram is stale — re-import after saving code edits.</span>}
+            <button type="button" onClick={analyzeSource} disabled={analyzing || !projectId || adapters.length === 0}>
+              {analyzing ? "Analyzing…" : "Analyze source"}
+            </button>
             <button type="button" onClick={() => setTemplateOpen(true)}>
               New from Template
             </button>
@@ -330,16 +361,28 @@ export const EditorView: React.FC<EditorViewProps> = ({
               Run
             </button>
           </header>
-          <MonacoEditor
-            language={language}
-            value={code}
-            onChange={(next) => {
-              setCode(next);
-              setSourceStale(Boolean(scenarioDocument));
-              setScriptDirty(true);
-              setDirty(true);
-            }}
-          />
+          <div className="loom-editor__monaco">
+            <MonacoEditor
+              language={language}
+              value={code}
+              onChange={(next) => {
+                setCode(next);
+                setAnalysis(null);
+                setSourceStale(Boolean(scenarioDocument));
+                setScriptDirty(true);
+                setDirty(true);
+              }}
+            />
+          </div>
+          {analysis && <section className="loom-editor__problems" aria-label="Source diagnostics" aria-live="polite">
+            <header><h2>Source analysis</h2><span>{analysis.supportPercent}% mapped to visual steps</span></header>
+            <p>Static parser only; this does not execute the script. Language-server linting and type diagnostics are not enabled yet.</p>
+            {analysis.diagnostics.length === 0
+              ? <p>No parser diagnostics. Unsupported or dynamic code may still be shown as native source in the visual view.</p>
+              : <ul>{analysis.diagnostics.map((diagnostic, index) => <li key={`${diagnostic.code}-${index}`} className={`loom-editor__problem loom-editor__problem--${diagnostic.severity}`}>
+                <span>{diagnostic.severity}</span><code>{diagnostic.code}</code><p>{diagnostic.message}</p>
+              </li>)}</ul>}
+          </section>}
         </section>
       )}
 

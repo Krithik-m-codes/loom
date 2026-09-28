@@ -54,4 +54,22 @@ describe("EditorView", () => {
     expect(onRunTest).not.toHaveBeenCalled();
     expect(screen.getByText(/Visual or config edits are not in the runnable script yet/)).toBeTruthy();
   });
+
+  it("analyzes code without executing it and lists source diagnostics", async () => {
+    parseScenarioSource.mockResolvedValueOnce({
+      source: { id: "source-s1", fileName: "a.py", language: "python", content: "broken" },
+      nodes: [],
+      diagnostics: [{ code: "PYTHON_SYNTAX", severity: "error", message: "Expected an indented block", span: { fileId: "source-s1", startOffset: 0, endOffset: 6 } }],
+      coveredRanges: [],
+      supportPercent: 0,
+    });
+    render(<EditorView suiteId="s1" scriptPath="a.py" engine="locust" targetHost="http://localhost:8080" onRunTest={() => {}} />);
+    fireEvent.click(await screen.findByRole("tab", { name: /code/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze source" }));
+
+    expect(await screen.findByRole("region", { name: "Source diagnostics" })).toBeTruthy();
+    expect(screen.getByText("Expected an indented block")).toBeTruthy();
+    expect(screen.getByText("0% mapped to visual steps")).toBeTruthy();
+    expect(parseScenarioSource).toHaveBeenCalledWith("locust", expect.objectContaining({ content: expect.any(String) }), expect.objectContaining({ projectId: "p1", suiteId: "s1" }));
+  });
 });

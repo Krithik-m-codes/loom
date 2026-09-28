@@ -3061,6 +3061,22 @@
 .loom-editor__import-empty p { max-width: 64ch; margin: 0; color: var(--loom-text-secondary); font-size: 0.875rem; line-height: 1.6; }
 .loom-editor__import-empty button { min-height: 2.625rem; border: 0; border-radius: var(--loom-radius-control); background: var(--loom-primary); color: var(--loom-primary-foreground); cursor: pointer; font-weight: 600; padding-inline: var(--loom-space-4); }
 .loom-editor__import-empty button:disabled { cursor: wait; opacity: 0.55; }
+.loom-editor > section[aria-label="Code editor"] { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+.loom-editor__monaco { flex: 1 1 0; min-height: 12rem; overflow: hidden; }
+.loom-editor__problems { flex: 0 1 15rem; min-height: 5rem; overflow: auto; border-block-start: 1px solid var(--loom-border); background: var(--loom-surface); padding: var(--loom-space-3) var(--loom-space-4); }
+.loom-editor__problems > header { display: flex; align-items: center; justify-content: space-between; gap: var(--loom-space-3); }
+.loom-editor__problems h2 { margin: 0; color: var(--loom-text); font-size: 0.875rem; }
+.loom-editor__problems > header > span,.loom-editor__problems > p { color: var(--loom-text-secondary); font-size: 0.75rem; }
+.loom-editor__problems > p { margin-block: var(--loom-space-2); }
+.loom-editor__problems ul { display: grid; gap: var(--loom-space-2); margin: var(--loom-space-3) 0 0; padding: 0; list-style: none; }
+.loom-editor__problem { display: grid; grid-template-columns: 5rem 10rem minmax(0, 1fr); align-items: baseline; gap: var(--loom-space-3); border-block-start: 1px solid var(--loom-border); padding-block: var(--loom-space-2); }
+.loom-editor__problem > span,.loom-editor__problem > code { font-family: var(--loom-font-mono); font-size: 0.6875rem; }
+.loom-editor__problem > span { color: var(--loom-text-secondary); text-transform: capitalize; }
+.loom-editor__problem > code { color: var(--loom-info); }
+.loom-editor__problem > p { margin: 0; color: var(--loom-text); font-size: 0.8125rem; }
+.loom-editor__problem--error > span { color: var(--loom-error); }
+.loom-editor__problem--warning > span { color: var(--loom-warning); }
+.loom-editor__problem--info > span { color: var(--loom-info); }
 
 /* IR-backed scenario editor: near-black canvas with restrained raised controls. */
 .loom-scenario-studio {
@@ -3326,6 +3342,8 @@
   .loom-editor__toolbar, .loom-editor__actions, .loom-editor__templates { align-items: flex-start; flex-wrap: wrap; }
   .loom-editor__toolbar { flex-direction: column; }
   .loom-file-chip { max-width: 72vw; }
+  .loom-editor__problem { grid-template-columns: 4rem minmax(5rem, auto); gap: var(--loom-space-2); }
+  .loom-editor__problem > p { grid-column: 1 / -1; }
   .loom-flow-builder { display: flex; flex-direction: column; overflow: auto; }
   .loom-node-palette { border-block-end: 1px solid var(--loom-border); border-inline-end: 0; }
   .loom-node-palette__hint { margin-block-start: var(--loom-space-2); }
